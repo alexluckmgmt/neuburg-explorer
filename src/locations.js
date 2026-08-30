@@ -54,7 +54,7 @@ export const LOCATIONS = [
     reward:260, rate:3.0
   },
   {
-    id:"hofgarten", name:"Hofgarten", x:135.6, z:74, shape:"cafe",
+    id:"hofgarten", name:"Hofgarten", x:138.1, z:68.1, shape:"cafe",
     color:"#E8896B", radius:6,
     flavor:"Eigentlich die Luitpoldstraße – aber unter Freunden heißt das hier nur 'Hofgarten'. Café-Tische, bunte Fassaden, Blick Richtung Schloss.",
     reward:190, rate:2.2

@@ -114,6 +114,49 @@ export function createRoadTexture(){
   return tex;
 }
 
+/* Echter grauer Asphalt mit feinem Kies-Rauschen — für die Luitpoldstraße */
+export function createAsphaltTexture(){
+  const c = canvas(128);
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#4a4750";
+  ctx.fillRect(0,0,128,128);
+  for(let i=0;i<600;i++){
+    const x = Math.random()*128, y = Math.random()*128;
+    const v = 55 + Math.random()*40;
+    ctx.fillStyle = `rgba(${v},${v},${v+4},${0.15+Math.random()*0.2})`;
+    ctx.fillRect(x,y,1.4,1.4);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/* Gehweg-Pflaster (grauer Fischgrät-Verbund) für Bürgersteige */
+export function createSidewalkTexture(){
+  const c = canvas(64);
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#c7c2c9";
+  ctx.fillRect(0,0,64,64);
+  ctx.strokeStyle = "#a9a3ad";
+  ctx.lineWidth = 2;
+  const s = 8;
+  for(let y=0;y<64;y+=s){
+    for(let x=0;x<64;x+=s){
+      const off = ((x/s)+(y/s))%2===0;
+      ctx.save();
+      ctx.translate(x+s/2,y+s/2);
+      ctx.rotate(off?Math.PI/4:-Math.PI/4);
+      ctx.strokeRect(-s/2,-s/2,s,s);
+      ctx.restore();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 /* Wasser mit leichtem Wellen-Streifenmuster */
 export function createWaterTexture(){
   const c = canvas(128);
