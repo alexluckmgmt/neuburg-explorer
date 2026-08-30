@@ -1,5 +1,5 @@
 import { LOCATIONS } from "./locations.js";
-import { ROAD_PATHS, BOUNDS } from "./world.js";
+import { ROAD_PATHS, LUITPOLD_PATH, BOUNDS } from "./world.js";
 import { state } from "./state.js";
 
 const overlay = document.getElementById("mapOverlay");
@@ -54,6 +54,12 @@ function draw(){
     ctx.lineTo(bx,bz);
     ctx.stroke();
   });
+  ctx.beginPath();
+  LUITPOLD_PATH.forEach((p,i) => {
+    const [px,pz] = toCanvas(p.x, p.z, size);
+    if(i===0) ctx.moveTo(px,pz); else ctx.lineTo(px,pz);
+  });
+  ctx.stroke();
 
   LOCATIONS.forEach(loc => {
     const [px,pz] = toCanvas(loc.x, loc.z, size);

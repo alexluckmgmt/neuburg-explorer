@@ -66,7 +66,7 @@ function makeGround(){
 
   groundPlane(640, 480, -8, 55, -0.03, grassTex, 7);
   groundPlane(300, 70, -10, -10, -0.02, cobbleTex, 5);       // Altstadt-Hügel
-  groundPlane(55, 60, 135, 78, -0.02, cobbleTex, 5);         // Luitpoldstraße/"Hofgarten"
+  groundPlane(52, 78, 121, 99, -0.02, cobbleTex, 5);         // Luitpoldstraße Ladenzeile
   groundPlane(280, 60, 60, 170, -0.01, waterTex, 10);        // Donau
 }
 makeGround();
@@ -80,34 +80,146 @@ export const ROAD_PATHS = [
   ["karlsplatz","rathaus"],
   ["karlsplatz","hofkirche"],
   ["hofkirche","unteres_tor"],
-  ["hofkirche","schloss"],
-  ["unteres_tor","hofgarten"],
-  ["hofgarten","donaukai"]
+  ["hofkirche","schloss"]
 ];
 
+const roadTex = createRoadTexture();
+
+function roadSegment(ax, az, bx, bz, width){
+  const dx = bx - ax, dz = bz - az;
+  const dist = Math.hypot(dx, dz);
+  if(dist < 0.01) return;
+  const geo = new THREE.PlaneGeometry(dist, width);
+  geo.rotateX(-Math.PI/2);
+  const mat = new THREE.MeshToonMaterial({
+    color: 0xffffff,
+    map: tiled(roadTex, dist/4, 1),
+    gradientMap: getGradientMap()
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set((ax+bx)/2, 0, (az+bz)/2);
+  mesh.rotation.y = Math.atan2(-dz, dx);
+  scene.add(mesh);
+}
+
+/* Straße aus einer Kette von Wegpunkten (für gebogene, echte Straßenverläufe) */
+function buildPathRoad(points, width = 5){
+  for(let i=0;i<points.length-1;i++){
+    roadSegment(points[i].x, points[i].z, points[i+1].x, points[i+1].z, width);
+  }
+}
+
 function buildRoads(){
-  const roadTex = createRoadTexture();
   const byId = Object.fromEntries(LOCATIONS.map(l => [l.id, l]));
   ROAD_PATHS.forEach(([fromId, toId]) => {
     const a = byId[fromId], b = byId[toId];
     if(!a || !b) return;
-    const dx = b.x - a.x, dz = b.z - a.z;
-    const dist = Math.hypot(dx, dz);
-    const width = 5;
-    const geo = new THREE.PlaneGeometry(dist, width);
-    geo.rotateX(-Math.PI/2);
-    const mat = new THREE.MeshToonMaterial({
-      color: 0xffffff,
-      map: tiled(roadTex, dist/4, 1),
-      gradientMap: getGradientMap()
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set((a.x+b.x)/2, 0, (a.z+b.z)/2);
-    mesh.rotation.y = Math.atan2(-dz, dx);
-    scene.add(mesh);
+    roadSegment(a.x, a.z, b.x, b.z, 5);
   });
 }
 buildRoads();
+
+/* ============================================================
+   LUITPOLDSTRASSE — echter, gebogener Straßenverlauf (aus OSM-
+   Wegpunkten, 152.5/3.8 im Norden bei "Unteres Tor" bis runter
+   Richtung Rosenstraße/Donaukai), plus Häuserzeile & Efeu-Mauer
+   entlang des Schlosshangs — nach den Fotos/Street-View-Recherche.
+   "Hofgarten" (Insider-Spitzname der Gruppe) sitzt auf dem echten
+   Wegpunkt (135.6, 74.0), am Anfang der belebten Ladenzeile.
+   ============================================================ */
+export const LUITPOLD_PATH = [
+  {x:113, z:-12},                                    // Anschluss ans Unteres Tor
+  {x:152.5, z:3.8}, {x:151.4, z:8.8}, {x:150.9, z:10.8}, {x:150.8, z:12.0},
+  {x:150.5, z:15.8}, {x:149.3, z:28.9}, {x:147.7, z:39.2},
+  {x:146.1, z:45.5}, {x:143.0, z:54.8}, {x:139.5, z:64.4}, {x:138.1, z:68.1},
+  {x:135.6, z:74.0},
+  {x:130.7, z:83.3}, {x:127.2, z:90.5},
+  {x:121.1, z:102.3}, {x:111.5, z:119.8}, {x:104.9, z:129.5},
+  {x:97.4, z:139.5}, {x:88.5, z:148.4}, {x:83.2, z:153.9},
+  {x:60, z:140}                                       // Anschluss an Donaukai
+];
+
+function makeFacade(x, z, faceAngle, opts){
+  const { color, trim = "#f2ead8", roof = "#8a5a4a", w = 5.2, h = 3.6, d = 3.2,
+          awning = false, dormer = true } = opts;
+  const g = new THREE.Group();
+  addPart(g, rbox(w,h,d,0.14,2), color).position.y = h/2;
+  addPart(g, rbox(w+0.3,0.4,d+0.3,0.08,2), trim).position.y = h+0.2;
+  if(dormer){
+    const dm = addPart(g, rbox(w*0.22,0.8,0.8,0.1,1), trim);
+    dm.position.set(0, h+0.55, d*0.3);
+  }
+  if(awning){
+    const aw = addPart(g, rbox(w*0.85,0.3,1.3,0.08,1), "#2a2430");
+    aw.position.set(0, h*0.62, d/2+0.6);
+    aw.rotation.x = -0.3;
+  }
+  [-w*0.28, w*0.28].forEach(wx=>{
+    addPart(g, rbox(0.9,1.1,0.12,0.08,1), "#a8d8e8").position.set(wx, h*0.55, d/2+0.05);
+  });
+  g.position.set(x,0,z);
+  g.rotation.y = faceAngle;
+  scene.add(g);
+  fakeShadow(x, z, Math.max(w,d)*0.55);
+}
+
+function buildLuitpoldstrasse(){
+  buildPathRoad(LUITPOLD_PATH, 6);
+
+  const palette = ["#E8896B","#E8C77E","#D9A441","#C9A98B","#B5562F"];
+  const hedgeMat = () => toonMaterial("#4f9a4a");
+  const trunkMat = toonMaterial("#8a5a3a");
+
+  for(let i=1;i<LUITPOLD_PATH.length-1;i++){
+    const p = LUITPOLD_PATH[i];
+    const prev = LUITPOLD_PATH[i-1], next = LUITPOLD_PATH[i+1];
+    const dx = next.x - prev.x, dz = next.z - prev.z;
+    const len = Math.hypot(dx,dz) || 1;
+    const dirx = dx/len, dirz = dz/len;
+    const perpx = -dirz, perpz = dirx;
+    const faceAngle = Math.atan2(-dirz, dirx);
+
+    if(p.z < 68){
+      /* Nördlicher, grüner Abschnitt Richtung Schloss: Efeu-Mauer + Bäume statt Läden */
+      if(i % 2 === 0){
+        const wx = p.x + perpx*4.5, wz = p.z + perpz*4.5;
+        const wall = new THREE.Mesh(rbox(5,1.6,0.6,0.1,1), toonMaterial("#8f8474"));
+        wall.position.set(wx, 0.8, wz);
+        wall.rotation.y = faceAngle;
+        scene.add(wall); addOutline(wall, scene, 0.05);
+        const ivy = new THREE.Mesh(new THREE.SphereGeometry(1.3,10,8), hedgeMat());
+        ivy.scale.set(1,0.7,0.6);
+        ivy.position.set(wx, 1.5, wz);
+        scene.add(ivy); addOutline(ivy, scene, 0.06);
+      } else {
+        const tx = p.x - perpx*4.5, tz = p.z - perpz*4.5;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,1.7,7), trunkMat);
+        trunk.position.set(tx,0.85,tz);
+        scene.add(trunk);
+        const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.2,10,8), hedgeMat());
+        leaves.position.set(tx,2.2,tz);
+        scene.add(leaves); addOutline(leaves, scene, 0.06);
+        fakeShadow(tx,tz,1.1);
+      }
+      continue;
+    }
+
+    /* Belebte Ladenzeile: bunte Fassaden auf beiden Seiten, wie auf den Fotos */
+    const side = i % 2 === 0 ? 1 : -1;
+    const fx = p.x + perpx*4.2*side, fz = p.z + perpz*4.2*side;
+    const color = palette[i % palette.length];
+    makeFacade(fx, fz, faceAngle + (side>0?Math.PI:0), {
+      color, awning: i % 3 === 0, dormer: i % 2 === 0
+    });
+  }
+}
+
+export function buildWorld(){
+  LOCATIONS.forEach(buildStructure);
+  buildLuitpoldstrasse();
+}
+
+export const BOUNDS = { minX:-150, maxX:158, minZ:-45, maxZ:150 };
 
 /* ============================================================
    SCHATTEN & HILFSFUNKTIONEN
@@ -222,44 +334,3 @@ function shade(hex, amt){
   return c;
 }
 
-/* ============================================================
-   LUITPOLDSTRASSE-DEKO — gegenüberliegende Häuserzeile + Bäume,
-   damit sich's wie eine echte bebaute Straße anfühlt (nicht wie
-   ein Park) — Referenz waren die Fotos, die du geschickt hast.
-   ============================================================ */
-function decorateStreet(loc){
-  const wallMat = toonMaterial("#f2ead8");
-  const roofMat = toonMaterial("#8a5a4a");
-  const opp = new THREE.Group();
-  const body = new THREE.Mesh(rbox(6,3.8,3.6,0.15,2), wallMat);
-  body.position.y = 1.9;
-  opp.add(body); addOutline(body, opp);
-  const roof = new THREE.Mesh(rbox(6.3,0.5,3.9,0.1,2), roofMat);
-  roof.position.y = 3.9;
-  opp.add(roof); addOutline(roof, opp);
-  opp.position.set(loc.x + 9, 0, loc.z - 8);
-  scene.add(opp);
-  fakeShadow(opp.position.x, opp.position.z, 4.2);
-
-  const hedgeMat = () => toonMaterial("#4f9a4a");
-  const trunkMat = toonMaterial("#8a5a3a");
-  [[-8,-3],[9,6]].forEach(([ox,oz])=>{
-    const tx = loc.x+ox, tz = loc.z+oz;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.28,1.6,7), trunkMat);
-    trunk.position.set(tx,0.8,tz);
-    scene.add(trunk);
-    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.15,10,8), hedgeMat());
-    leaves.position.set(tx,2.1,tz);
-    scene.add(leaves);
-    addOutline(leaves, scene, 0.06);
-    fakeShadow(tx,tz,1.1);
-  });
-}
-
-export function buildWorld(){
-  LOCATIONS.forEach(buildStructure);
-  const hofgarten = LOCATIONS.find(l => l.id === "hofgarten");
-  if(hofgarten) decorateStreet(hofgarten);
-}
-
-export const BOUNDS = { minX:-150, maxX:148, minZ:-45, maxZ:150 };
