@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { scene, fakeShadow } from "./world.js";
+import { scene, fakeShadow, STREET_SPAWN } from "./world.js";
 import { toonMaterial, addOutline } from "./textures.js";
 
 /* Chibi-Figur: großer runder Kopf, weicher Körper, kleine Stummel-Arme —
@@ -42,7 +42,7 @@ const eyeL = new THREE.Mesh(eyeGeo, eyeMat); eyeL.position.set(-0.2,1.98,0.5);
 const eyeR = new THREE.Mesh(eyeGeo, eyeMat); eyeR.position.set(0.2,1.98,0.5);
 player.add(eyeL, eyeR);
 
-player.position.set(-120, 0, 84);
+player.position.set(STREET_SPAWN.x, 0, STREET_SPAWN.z);
 scene.add(player);
 
 export const playerShadow = fakeShadow(0,0,0.8);

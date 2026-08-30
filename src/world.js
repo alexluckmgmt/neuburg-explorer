@@ -1,10 +1,8 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { LOCATIONS } from "./locations.js";
 import {
   toonMaterial, addOutline, getGradientMap,
-  createSkyTexture, createGrassTexture, createCobbleTexture,
-  createRoadTexture, createWaterTexture, createShadowTexture,
+  createSkyTexture, createGrassTexture, createShadowTexture,
   createAsphaltTexture, createSidewalkTexture
 } from "./textures.js";
 
@@ -13,9 +11,9 @@ export const scene = new THREE.Scene();
 
 const skyTex = createSkyTexture();
 scene.background = skyTex;
-scene.fog = new THREE.Fog(0xdcf3ff, 90, 320);
+scene.fog = new THREE.Fog(0xdcf3ff, 60, 220);
 
-export const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.1, 500);
+export const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.1, 400);
 export const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -27,7 +25,6 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-/* Weiches, klares Mobile-Idle-Licht: viel Ambient, eine sanfte Sonne */
 scene.add(new THREE.HemisphereLight(0xffffff, 0x9fb8c9, 1.05));
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.0);
 sun.position.set(40, 60, 20);
@@ -35,9 +32,28 @@ scene.add(sun);
 
 const shadowTex = createShadowTexture();
 
-/* ============================================================
-   BODEN — Gras, Altstadt-Hügel, Hofgarten-Grün, Donau
-   ============================================================ */
+export function fakeShadow(x,z,r){
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(r*2.1, r*2.1),
+    new THREE.MeshBasicMaterial({map:shadowTex, transparent:true, depthWrite:false})
+  );
+  m.rotation.x = -Math.PI/2;
+  m.position.set(x, 0.02, z);
+  scene.add(m);
+  return m;
+}
+
+function rbox(w,h,d,radius=0.18,seg=2){
+  return new RoundedBoxGeometry(w,h,d,seg,radius);
+}
+
+function addPart(group, geo, color){
+  const mesh = new THREE.Mesh(geo, toonMaterial(color));
+  group.add(mesh);
+  addOutline(mesh, group);
+  return mesh;
+}
+
 function tiled(tex, repeatX, repeatY){
   const t = tex.clone();
   t.needsUpdate = true;
@@ -46,96 +62,38 @@ function tiled(tex, repeatX, repeatY){
   return t;
 }
 
-function groundPlane(w, h, x, z, y, tex, repeatEvery = 6){
-  const geo = new THREE.PlaneGeometry(w, h);
-  geo.rotateX(-Math.PI/2);
-  const mat = new THREE.MeshToonMaterial({
-    color: 0xffffff,
-    map: tiled(tex, w/repeatEvery, h/repeatEvery),
-    gradientMap: getGradientMap()
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, y, z);
-  scene.add(mesh);
-  return mesh;
-}
-
-function makeGround(){
-  const grassTex = createGrassTexture();
-  const cobbleTex = createCobbleTexture();
-  const waterTex = createWaterTexture();
-
-  groundPlane(640, 480, -8, 55, -0.03, grassTex, 7);
-  groundPlane(300, 70, -10, -10, -0.02, cobbleTex, 5);       // Altstadt-Hügel
-  groundPlane(52, 78, 121, 99, -0.02, cobbleTex, 5);         // Luitpoldstraße Ladenzeile
-  groundPlane(280, 60, 60, 170, -0.01, waterTex, 10);        // Donau
-}
-makeGround();
-
 /* ============================================================
-   STRASSEN — verbindet die Orte zu einem begehbaren Netz
+   LUITPOLDSTRASSE — EINE gerade Straße (bewusst vereinfacht,
+   damit die Geometrie stimmt), nach Street-View-Begehung:
+   Krieger-Denkmal-Grünfläche (Norden) -> großes Eckhaus mit
+   Mansarde -> "Optik"-Haus -> "The Oracle" (bordeauxrote
+   Stühle, Holztische). Alles andere von der Karte ist bewusst
+   entfernt, bis diese eine Straße wirklich stimmt.
    ============================================================ */
-export const ROAD_PATHS = [
-  ["oberes_tor","karlsplatz"],
-  ["karlsplatz","bibliothek"],
-  ["karlsplatz","rathaus"],
-  ["karlsplatz","hofkirche"],
-  ["hofkirche","unteres_tor"],
-  ["hofkirche","schloss"]
-];
+const STREET_A = { x:147.7, z:39.2 };  // Norden, bei der Grünfläche
+const STREET_B = { x:121.1, z:102.3 }; // Süden, hinter "The Oracle"
 
-const roadTex = createRoadTexture();
+const SDX = STREET_B.x - STREET_A.x, SDZ = STREET_B.z - STREET_A.z;
+const STREET_LEN = Math.hypot(SDX, SDZ);
+const DIRX = SDX/STREET_LEN, DIRZ = SDZ/STREET_LEN;
+const PERPX = -DIRZ, PERPZ = DIRX;
+const FACE_ANGLE = Math.atan2(-DIRZ, DIRX); // rotation.y, damit lokale +X-Achse in Straßenrichtung zeigt
 
-function roadSegment(ax, az, bx, bz, width){
-  const dx = bx - ax, dz = bz - az;
-  const dist = Math.hypot(dx, dz);
-  if(dist < 0.01) return;
-  const geo = new THREE.PlaneGeometry(dist, width);
-  geo.rotateX(-Math.PI/2);
-  const mat = new THREE.MeshToonMaterial({
-    color: 0xffffff,
-    map: tiled(roadTex, dist/4, 1),
-    gradientMap: getGradientMap()
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set((ax+bx)/2, 0, (az+bz)/2);
-  mesh.rotation.y = Math.atan2(-dz, dx);
-  scene.add(mesh);
+const ROAD_W = 6.4, WALK_W = 2.3;
+const SHOP_SIDE = 1;   // Ladenzeile liegt auf der +PERP Seite
+const WALL_SIDE = -1;  // Bruchstein-/Efeu-Mauer auf der gegenüberliegenden Seite
+
+function atT(t, side = 0, sideOffset = 0){
+  return {
+    x: STREET_A.x + DIRX*t + PERPX*side*sideOffset,
+    z: STREET_A.z + DIRZ*t + PERPZ*side*sideOffset
+  };
 }
 
-function buildRoads(){
-  const byId = Object.fromEntries(LOCATIONS.map(l => [l.id, l]));
-  ROAD_PATHS.forEach(([fromId, toId]) => {
-    const a = byId[fromId], b = byId[toId];
-    if(!a || !b) return;
-    roadSegment(a.x, a.z, b.x, b.z, 5);
-  });
+/* rotation.y, damit die lokale +Z-Achse (Fassaden-Vorderseite) zur Straßenmitte zeigt */
+function facingRoadAngle(side){
+  return Math.atan2(-side*PERPX, -side*PERPZ);
 }
-buildRoads();
-
-/* ============================================================
-   LUITPOLDSTRASSE — nach Street-View-Begehung nachgebaut.
-   Echter, gebogener Verlauf (OSM-Wegpunkte, "Unteres Tor" im
-   Norden bis runter Richtung Donaukai). Der recherchierte,
-   fotografierte Abschnitt (Krieger-Denkmal-Grünfläche -> großes
-   Eckhaus mit Mansarde -> "Optik"-Haus -> "The Oracle" mit den
-   roten Stühlen) wird als konkrete Einzelgebäude nachgebaut,
-   nicht als generische Kopien. "Hofgarten" (Insider-Spitzname
-   der Gruppe für die Straße) sitzt exakt auf dem Oracle-Punkt.
-   ============================================================ */
-export const LUITPOLD_PATH = [
-  {x:113, z:-12},                                    // Anschluss ans Unteres Tor
-  {x:152.5, z:3.8}, {x:151.4, z:8.8}, {x:150.9, z:10.8}, {x:150.8, z:12.0},
-  {x:150.5, z:15.8}, {x:149.3, z:28.9}, {x:147.7, z:39.2},
-  {x:146.1, z:45.5}, {x:143.0, z:54.8}, {x:139.5, z:64.4}, {x:138.1, z:68.1},
-  {x:135.6, z:74.0},
-  {x:130.7, z:83.3}, {x:127.2, z:90.5},
-  {x:121.1, z:102.3}, {x:111.5, z:119.8}, {x:104.9, z:129.5},
-  {x:97.4, z:139.5}, {x:88.5, z:148.4}, {x:83.2, z:153.9},
-  {x:60, z:140}                                       // Anschluss an Donaukai
-];
-
-const ROAD_W = 6.4, WALK_W = 2.2;
 
 function flatSegment(ax, az, bx, bz, width, mat, y = 0){
   const dx = bx-ax, dz = bz-az;
@@ -150,37 +108,61 @@ function flatSegment(ax, az, bx, bz, width, mat, y = 0){
   return mesh;
 }
 
-/* Asphalt + beidseitige Gehwege + gestrichelte Mittellinie, entlang einer Wegpunktkette */
-function buildStreetWithSidewalks(points, roadW = ROAD_W, walkW = WALK_W){
+function buildStreetSurface(){
   const asphaltTex = createAsphaltTexture();
   const sidewalkTex = createSidewalkTexture();
-  const lineMat = new THREE.MeshBasicMaterial({ color: "#f2ead8" });
+  const lineMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
 
-  for(let i=0;i<points.length-1;i++){
-    const a = points[i], b = points[i+1];
-    const dx = b.x-a.x, dz = b.z-a.z;
-    const len = Math.hypot(dx,dz) || 1;
-    const perpx = -dz/len, perpz = dx/len;
-    const offset = roadW/2 + walkW/2;
+  const a = atT(-6), b = atT(STREET_LEN+6);
+  const roadMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(asphaltTex, STREET_LEN/4, 1), gradientMap: getGradientMap() });
+  flatSegment(a.x,a.z,b.x,b.z, ROAD_W, roadMat, 0);
 
-    const roadMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(asphaltTex, len/4, 1), gradientMap: getGradientMap() });
-    flatSegment(a.x,a.z,b.x,b.z, roadW, roadMat, 0);
+  const offset = ROAD_W/2 + WALK_W/2;
+  const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, STREET_LEN/2.5, WALK_W/2.5), gradientMap: getGradientMap() });
+  const wa1 = atT(-6, 1, offset), wb1 = atT(STREET_LEN+6, 1, offset);
+  flatSegment(wa1.x,wa1.z,wb1.x,wb1.z, WALK_W, walkMat, 0.006);
+  const wa2 = atT(-6, -1, offset), wb2 = atT(STREET_LEN+6, -1, offset);
+  flatSegment(wa2.x,wa2.z,wb2.x,wb2.z, WALK_W, walkMat, 0.006);
 
-    const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, len/2.5, walkW/2.5), gradientMap: getGradientMap() });
-    flatSegment(a.x+perpx*offset, a.z+perpz*offset, b.x+perpx*offset, b.z+perpz*offset, walkW, walkMat, 0.006);
-    flatSegment(a.x-perpx*offset, a.z-perpz*offset, b.x-perpx*offset, b.z-perpz*offset, walkW, walkMat, 0.006);
+  const dash = 1.1, gap = 0.9;
+  let t = -6;
+  while(t < STREET_LEN+6){
+    const p0 = atT(t), p1 = atT(Math.min(STREET_LEN+6, t+dash));
+    flatSegment(p0.x,p0.z,p1.x,p1.z, 0.22, lineMat, 0.012);
+    t += dash+gap;
+  }
 
-    const dash = 1.1, gap = 0.9;
-    let t = 0;
-    while(t < len){
-      const t0 = t/len, t1 = Math.min(len, t+dash)/len;
-      flatSegment(a.x+dx*t0, a.z+dz*t0, a.x+dx*t1, a.z+dz*t1, 0.22, lineMat, 0.012);
-      t += dash+gap;
-    }
+  /* Gras beidseitig hinter den Gehwegen, damit nichts "in der Luft" endet */
+  const grassTex = createGrassTexture();
+  const grassMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(grassTex, 30, 30), gradientMap: getGradientMap() });
+  const gOff = ROAD_W/2 + WALK_W + 20;
+  [1,-1].forEach(side=>{
+    const ga = atT(-10, side, gOff), gb = atT(STREET_LEN+10, side, gOff);
+    flatSegment(ga.x,ga.z,gb.x,gb.z, 40, grassMat, -0.02);
+  });
+}
+
+/* Zebrastreifen: Balken quer über die volle Fahrbahnbreite, mit Lücken in Straßenrichtung */
+function crosswalk(t){
+  const stripeMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
+  const stripeThickness = 0.6, gap = 0.55;
+  const count = 6;
+  const totalSpan = count*stripeThickness + (count-1)*gap;
+  let start = t - totalSpan/2;
+  for(let i=0;i<count;i++){
+    const st = start + i*(stripeThickness+gap);
+    const geo = new THREE.PlaneGeometry(stripeThickness, ROAD_W*0.86);
+    geo.rotateX(-Math.PI/2);
+    const mesh = new THREE.Mesh(geo, stripeMat);
+    const p = atT(st);
+    mesh.position.set(p.x, 0.014, p.z);
+    mesh.rotation.y = FACE_ANGLE;
+    scene.add(mesh);
   }
 }
 
-function streetLamp(x, z){
+function streetLamp(t, side){
+  const p = atT(t, side, ROAD_W/2+WALK_W+0.6);
   const g = new THREE.Group();
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.11,4.2,8), toonMaterial("#2c2a33"));
   pole.position.y = 2.1;
@@ -191,12 +173,14 @@ function streetLamp(x, z){
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.28,10,8), toonMaterial("#F5E6A8"));
   head.position.set(1.0,3.95,0);
   g.add(head); addOutline(head, g, 0.06);
-  g.position.set(x,0,z);
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = facingRoadAngle(side);
   scene.add(g);
-  fakeShadow(x,z,0.5);
+  fakeShadow(p.x,p.z,0.5);
 }
 
-function parkedCar(x, z, angle, color){
+function parkedCar(t, side, color){
+  const p = atT(t, side, ROAD_W/2+0.7);
   const g = new THREE.Group();
   const body = new THREE.Mesh(rbox(1.9,0.75,0.95,0.15,2), toonMaterial(color));
   body.position.y = 0.5;
@@ -211,52 +195,61 @@ function parkedCar(x, z, angle, color){
     wheel.position.set(wx,0.22,wz);
     g.add(wheel);
   });
-  g.position.set(x,0,z);
-  g.rotation.y = angle;
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = FACE_ANGLE; // Auto steht parallel zur Straße
   scene.add(g);
-  fakeShadow(x,z,1.3);
+  fakeShadow(p.x,p.z,1.3);
 }
 
-function crosswalk(x, z, angle){
-  const stripeMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
-  for(let i=-2;i<=2;i++){
-    const geo = new THREE.PlaneGeometry(0.6, ROAD_W*0.82);
-    geo.rotateX(-Math.PI/2);
-    const mesh = new THREE.Mesh(geo, stripeMat);
-    const ox = Math.cos(angle)*i*1.0, oz = Math.sin(angle)*i*1.0;
-    mesh.position.set(x+ox, 0.014, z+oz);
-    mesh.rotation.y = angle + Math.PI/2;
-    scene.add(mesh);
-  }
+function ivyWallSegment(t){
+  const p = atT(t, WALL_SIDE, ROAD_W/2+WALK_W+1.2);
+  const wall = new THREE.Mesh(rbox(4.6,1.6,0.6,0.08,1), toonMaterial("#8f8474"));
+  wall.position.set(p.x, 0.8, p.z);
+  wall.rotation.y = FACE_ANGLE;
+  scene.add(wall); addOutline(wall, scene, 0.05);
+  const ivy = new THREE.Mesh(new THREE.SphereGeometry(1.3,10,8), toonMaterial("#4f9a4a"));
+  ivy.scale.set(1,0.7,0.6);
+  ivy.position.set(p.x, 1.5, p.z);
+  scene.add(ivy); addOutline(ivy, scene, 0.06);
 }
 
-/* Denkmal-Grünfläche am Nordende (Krieger Denkmal) */
-function buildMonumentGreen(x, z){
+/* Krieger-Denkmal-Grünfläche am Nordende */
+function buildMonumentGreen(t){
+  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+7);
   const lawnTex = createGrassTexture("#78c469","#63ab55");
-  groundPlane(20, 22, x, z, -0.015, lawnTex, 5);
+  const lawnMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(lawnTex, 4, 4.4), gradientMap: getGradientMap() });
+  const geo = new THREE.PlaneGeometry(18, 20);
+  geo.rotateX(-Math.PI/2);
+  const lawn = new THREE.Mesh(geo, lawnMat);
+  lawn.position.set(p.x, -0.015, p.z);
+  scene.add(lawn);
+
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.5,0.6,8), toonMaterial("#c9c2b6"));
-  base.position.set(x, 0.3, z);
+  base.position.set(p.x, 0.3, p.z);
   scene.add(base); addOutline(base, scene, 0.05);
   const column = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.42,3.2,10), toonMaterial("#d8d2c6"));
-  column.position.set(x, 2.2, z);
+  column.position.set(p.x, 2.2, p.z);
   scene.add(column); addOutline(column, scene, 0.05);
   const cap = new THREE.Mesh(new THREE.ConeGeometry(0.5,0.6,10), toonMaterial("#b8ae9e"));
-  cap.position.set(x, 4.1, z);
+  cap.position.set(p.x, 4.1, p.z);
   scene.add(cap); addOutline(cap, scene, 0.05);
-  fakeShadow(x,z,1.8);
-  [[-3.2,2.5],[3.4,-2.2]].forEach(([ox,oz])=>{
+  fakeShadow(p.x,p.z,1.8);
+
+  [[-3.5,2.8],[3.6,-2.4]].forEach(([ox,oz])=>{
+    const tx = p.x+ox, tz = p.z+oz;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,1.7,7), toonMaterial("#8a5a3a"));
-    trunk.position.set(x+ox,0.85,z+oz);
+    trunk.position.set(tx,0.85,tz);
     scene.add(trunk);
     const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.3,10,8), toonMaterial("#4f9a4a"));
-    leaves.position.set(x+ox,2.3,z+oz);
+    leaves.position.set(tx,2.3,tz);
     scene.add(leaves); addOutline(leaves, scene, 0.06);
-    fakeShadow(x+ox,z+oz,1.2);
+    fakeShadow(tx,tz,1.2);
   });
 }
 
 /* "70 Luitpoldstraße": großes cremefarbenes Eckhaus, dunkles Mansarddach, Gauben, Balkon */
-function buildGrandBuilding(x, z, faceAngle){
+function buildGrandBuilding(t){
+  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+4.6);
   const g = new THREE.Group();
   addPart(g, rbox(8.5,5.2,4.6,0.1,2), "#e9e2cf").position.y = 2.6;
   const mansard = addPart(g, rbox(9.0,1.7,5.0,0.12,2), "#5a3a35");
@@ -269,14 +262,15 @@ function buildGrandBuilding(x, z, faceAngle){
   balcony.position.set(0, 3.3, 2.35);
   const archDoor = addPart(g, rbox(1.3,2.2,0.1,0.3,2), "#2c2430");
   archDoor.position.set(0, 1.1, 2.32);
-  g.position.set(x,0,z);
-  g.rotation.y = faceAngle;
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = facingRoadAngle(SHOP_SIDE);
   scene.add(g);
-  fakeShadow(x,z,5.2);
+  fakeShadow(p.x,p.z,5.2);
 }
 
 /* "75 Luitpoldstraße": weißes Haus mit Ladenfront ("Optik"), eine Gaube */
-function buildOptikBuilding(x, z, faceAngle){
+function buildOptikBuilding(t){
+  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+4.2);
   const g = new THREE.Group();
   addPart(g, rbox(6.5,4.6,3.8,0.1,2), "#f2ead8").position.y = 2.3;
   const roof = addPart(g, rbox(6.9,1.1,4.1,0.1,2), "#6b4a3a");
@@ -287,14 +281,16 @@ function buildOptikBuilding(x, z, faceAngle){
   [-1.9,1.9].forEach(dx=>{
     addPart(g, rbox(1.4,1.2,0.06,0.05,1), "#bfe3f0").position.set(dx, 1.15, 1.96);
   });
-  g.position.set(x,0,z);
-  g.rotation.y = faceAngle;
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = facingRoadAngle(SHOP_SIDE);
   scene.add(g);
-  fakeShadow(x,z,4.2);
+  fakeShadow(p.x,p.z,4.2);
 }
 
 /* "The Oracle": Lachs-Fassade, dunkle Ladenfront, Markise, Bordeaux-Stühle + Holztische */
-function buildOracleBuilding(x, z, faceAngle){
+function buildOracleBuilding(t){
+  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+3.8);
+  const faceAngle = facingRoadAngle(SHOP_SIDE);
   const g = new THREE.Group();
   addPart(g, rbox(7.4,4.4,4.0,0.12,2), "#E8896B").position.y = 2.2;
   addPart(g, rbox(7.7,0.4,4.3,0.08,2), "#f2ead8").position.y = 4.5;
@@ -305,20 +301,20 @@ function buildOracleBuilding(x, z, faceAngle){
   [-2.4,0,2.4].forEach(dx=>{
     addPart(g, rbox(1.3,1.6,0.1,0.06,1), "#2c2430").position.set(dx, 1.15, 2.02);
   });
-  g.position.set(x,0,z);
+  g.position.set(p.x,0,p.z);
   g.rotation.y = faceAngle;
   scene.add(g);
-  fakeShadow(x,z,4.6);
+  fakeShadow(p.x,p.z,4.6);
 
-  /* lokale +Z-Achse (Schaufenster/Markise) zeigt nach der Rotation in Weltrichtung (sinθ, cosθ) */
+  /* lokale +Z-Achse (Schaufenster) zeigt nach der Rotation in Weltrichtung (sinθ, cosθ) */
   const dirx = Math.sin(faceAngle), dirz = Math.cos(faceAngle);
   const sidex = Math.cos(faceAngle), sidez = -Math.sin(faceAngle);
   const tableTop = new THREE.CylinderGeometry(0.4,0.4,0.07,14);
   const tableLeg = new THREE.CylinderGeometry(0.05,0.05,0.7,8);
   const chairSeat = new THREE.BoxGeometry(0.4,0.08,0.4);
   const chairBack = new THREE.BoxGeometry(0.4,0.5,0.06);
-  [[-1.6],[1.6]].forEach(([lx])=>{
-    const tx = x + dirx*3.2 + sidex*lx, tz = z + dirz*3.2 + sidez*lx;
+  [-1.6,1.6].forEach(lx=>{
+    const tx = p.x + dirx*3.2 + sidex*lx, tz = p.z + dirz*3.2 + sidez*lx;
     const table = new THREE.Mesh(tableTop, toonMaterial("#8a6a4a"));
     table.position.set(tx,0.72,tz);
     scene.add(table); addOutline(table, scene, 0.05);
@@ -336,199 +332,39 @@ function buildOracleBuilding(x, z, faceAngle){
     });
     fakeShadow(tx,tz,1.1);
   });
-}
 
-/* Bruchsteinmauer mit Efeu — begleitet die Straße hangseitig */
-function ivyWallSegment(x, z, faceAngle){
-  const wall = new THREE.Mesh(rbox(5,1.6,0.6,0.08,1), toonMaterial("#8f8474"));
-  wall.position.set(x, 0.8, z);
-  wall.rotation.y = faceAngle;
-  scene.add(wall); addOutline(wall, scene, 0.05);
-  const ivy = new THREE.Mesh(new THREE.SphereGeometry(1.3,10,8), toonMaterial("#4f9a4a"));
-  ivy.scale.set(1,0.7,0.6);
-  ivy.position.set(x, 1.5, z);
-  scene.add(ivy); addOutline(ivy, scene, 0.06);
-}
-
-function pathDir(points, i){
-  const prev = points[Math.max(0,i-1)], next = points[Math.min(points.length-1,i+1)];
-  const dx = next.x-prev.x, dz = next.z-prev.z;
-  const len = Math.hypot(dx,dz) || 1;
-  return { dirx: dx/len, dirz: dz/len, perpx: -dz/len, perpz: dx/len, faceAngle: Math.atan2(-dz/len, dx/len) };
-}
-
-/* Rotation.y, damit ein Objekt (lokale +Z-Achse = Vorderseite) zur Straßenmitte
-   zeigt, wenn es auf `side` (+1/-1) entlang `perp` von der Mitte weg versetzt ist. */
-function facingRoadAngle(perpx, perpz, side){
-  return Math.atan2(-side*perpx, -side*perpz);
+  return p;
 }
 
 function buildLuitpoldstrasse(){
-  buildStreetWithSidewalks(LUITPOLD_PATH, ROAD_W, WALK_W);
+  buildStreetSurface();
 
-  const shopSide = 1;   // Ladenzeile liegt auf der +perp Seite
-  const wallSide = -1;  // Bruchsteinmauer auf der gegenüberliegenden, hangseitigen Seite
-  const setback = ROAD_W/2 + WALK_W + 2.8;
+  buildMonumentGreen(2);
+  buildGrandBuilding(12);
+  buildOptikBuilding(24);
+  const oraclePos = buildOracleBuilding(34);
 
-  buildMonumentGreen(147.0, 33.5);
+  crosswalk(40);
 
-  const p8 = LUITPOLD_PATH[8], d8 = pathDir(LUITPOLD_PATH,8);
-  buildGrandBuilding(p8.x + d8.perpx*shopSide*setback, p8.z + d8.perpz*shopSide*setback, facingRoadAngle(d8.perpx,d8.perpz,shopSide));
-
-  const p9 = LUITPOLD_PATH[9], d9 = pathDir(LUITPOLD_PATH,9);
-  buildOptikBuilding(p9.x + d9.perpx*shopSide*setback, p9.z + d9.perpz*shopSide*setback, facingRoadAngle(d9.perpx,d9.perpz,shopSide));
-
-  const hofgarten = LOCATIONS.find(l => l.id === "hofgarten");
-  const p11 = hofgarten || LUITPOLD_PATH[10];
-  const d11 = pathDir(LUITPOLD_PATH,10);
-  const oracleSetback = ROAD_W/2 + WALK_W + 3.4;
-  buildOracleBuilding(p11.x + d11.perpx*shopSide*oracleSetback, p11.z + d11.perpz*shopSide*oracleSetback, facingRoadAngle(d11.perpx,d11.perpz,shopSide));
-
-  crosswalk(133.5, 78.6, Math.atan2(74.0-83.3, 135.6-130.7));
-
-  for(let i=1;i<8;i++){
-    const p = LUITPOLD_PATH[i];
-    const d = pathDir(LUITPOLD_PATH,i);
-    if(i % 2 === 0){
-      ivyWallSegment(p.x + d.perpx*wallSide*(ROAD_W/2+WALK_W+1.2), p.z + d.perpz*wallSide*(ROAD_W/2+WALK_W+1.2), d.faceAngle);
-    } else {
-      streetLamp(p.x + d.perpx*shopSide*(ROAD_W/2+WALK_W+0.6), p.z + d.perpz*shopSide*(ROAD_W/2+WALK_W+0.6));
-    }
-  }
+  [6, 18, 30, 44].forEach(t => streetLamp(t, SHOP_SIDE));
+  [4, 16, 28, 46, 52].forEach(t => ivyWallSegment(t));
 
   const carColors = ["#3d4a5c","#8a1f2b","#c7c2c9","#2a2f38"];
-  let carIdx = 0;
-  for(let i=8;i<=13;i++){
-    const p = LUITPOLD_PATH[i];
-    const d = pathDir(LUITPOLD_PATH,i);
-    const cx = p.x + d.perpx*wallSide*(ROAD_W/2+0.7);
-    const cz = p.z + d.perpz*wallSide*(ROAD_W/2+0.7);
-    parkedCar(cx, cz, d.faceAngle, carColors[carIdx % carColors.length]);
-    carIdx++;
-  }
+  [8, 20, 46, 52].forEach((t,i) => parkedCar(t, WALL_SIDE, carColors[i % carColors.length]));
 
-  const palette = ["#D9A441","#C9A98B","#B5562F","#E8C77E"];
-  for(let i=13;i<LUITPOLD_PATH.length-1;i++){
-    const p = LUITPOLD_PATH[i];
-    const d = pathDir(LUITPOLD_PATH,i);
-    const side = i % 2 === 0 ? 1 : -1;
-    const fx = p.x + d.perpx*side*(ROAD_W/2+WALK_W+3);
-    const fz = p.z + d.perpz*side*(ROAD_W/2+WALK_W+3);
-    const g = new THREE.Group();
-    addPart(g, rbox(5.2,3.6,3.2,0.14,2), palette[i % palette.length]).position.y = 1.8;
-    addPart(g, rbox(5.5,0.4,3.5,0.08,2), "#f2ead8").position.y = 3.8;
-    g.position.set(fx,0,fz);
-    g.rotation.y = facingRoadAngle(d.perpx,d.perpz,side);
-    scene.add(g);
-    fakeShadow(fx,fz,3);
-  }
+  return oraclePos;
 }
 
 export function buildWorld(){
-  LOCATIONS.forEach(buildStructure);
   buildLuitpoldstrasse();
 }
 
-export const BOUNDS = { minX:-150, maxX:158, minZ:-45, maxZ:150 };
+export const STREET_SPAWN = atT(29, WALL_SIDE, 1.6);
+export { STREET_A, STREET_B };
 
-/* ============================================================
-   SCHATTEN & HILFSFUNKTIONEN
-   ============================================================ */
-export function fakeShadow(x,z,r){
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(r*2.1, r*2.1),
-    new THREE.MeshBasicMaterial({map:shadowTex, transparent:true, depthWrite:false})
-  );
-  m.rotation.x = -Math.PI/2;
-  m.position.set(x, 0.02, z);
-  scene.add(m);
-  return m;
-}
-
-function rbox(w,h,d,radius=0.18,seg=2){
-  return new RoundedBoxGeometry(w,h,d,seg,radius);
-}
-
-/* Fügt Hauptkörper + Dach als toon-material + Outline zur Gruppe hinzu */
-function addPart(group, geo, color){
-  const mesh = new THREE.Mesh(geo, toonMaterial(color));
-  group.add(mesh);
-  addOutline(mesh, group);
-  return mesh;
-}
-
-/* ============================================================
-   GEBÄUDE BAUEN — je nach shape unterschiedliche Form
-   ============================================================ */
-function buildStructure(loc){
-  const g = new THREE.Group();
-  const roofColor = shade(loc.color, 0.62);
-
-  switch(loc.shape){
-    case "gate": {
-      addPart(g, rbox(1.5,5,1.5,0.25,2), loc.color).position.set(-2.2,2.5,0);
-      addPart(g, rbox(1.5,5,1.5,0.25,2), loc.color).position.set(2.2,2.5,0);
-      addPart(g, rbox(6.6,1.7,1.9,0.2,2), loc.color).position.set(0,5.3,0);
-      const roof = addPart(g, new THREE.ConeGeometry(1.15,1.5,4), roofColor);
-      roof.position.set(0,6.8,0); roof.rotation.y = Math.PI/4;
-      break;
-    }
-    case "plaza": {
-      addPart(g, new THREE.CylinderGeometry(3.2,3.4,0.3,24), loc.color).position.y = 0.15;
-      addPart(g, new THREE.CylinderGeometry(0.35,0.45,2.2,10), roofColor).position.y = 1.25;
-      const bowl = addPart(g, new THREE.SphereGeometry(0.9,14,10,0,Math.PI*2,0,Math.PI*0.5), "#a8d8e8");
-      bowl.position.y = 1.9; bowl.rotation.x = Math.PI;
-      break;
-    }
-    case "hall": {
-      addPart(g, rbox(7,4.4,5,0.22,2), loc.color).position.y = 2.2;
-      const roof = addPart(g, new THREE.ConeGeometry(5.1,2.2,4), roofColor);
-      roof.position.y = 5.4; roof.rotation.y = Math.PI/4;
-      break;
-    }
-    case "church": {
-      addPart(g, rbox(5,4.8,7,0.2,2), loc.color).position.y = 2.4;
-      const roof = addPart(g, new THREE.CylinderGeometry(0.01,3.65,2.4,4), roofColor);
-      roof.position.y = 6; roof.rotation.y = Math.PI/4;
-      addPart(g, new THREE.CylinderGeometry(0.9,1.1,6,8), loc.color).position.set(0,5.4,-4);
-      const spire = addPart(g, new THREE.ConeGeometry(1.08,3,8), roofColor);
-      spire.position.set(0,9.9,-4);
-      break;
-    }
-    case "library": {
-      addPart(g, rbox(6,4,4.6,0.2,2), loc.color).position.y = 2;
-      addPart(g, rbox(6.5,0.6,5.1,0.15,2), roofColor).position.y = 4.3;
-      break;
-    }
-    case "castle": {
-      addPart(g, rbox(11,7,9,0.2,2), loc.color).position.y = 3.5;
-      addPart(g, rbox(11.5,0.7,9.5,0.15,2), roofColor).position.y = 7.35;
-      [[-5.6,-4.4],[5.6,-4.4],[-5.6,4.4],[5.6,4.4]].forEach(([tx,tz])=>{
-        addPart(g, new THREE.CylinderGeometry(1.3,1.4,9,10), loc.color).position.set(tx,4.5,tz);
-        addPart(g, new THREE.ConeGeometry(1.65,2.4,10), roofColor).position.set(tx,10.2,tz);
-      });
-      break;
-    }
-    case "cafe": {
-      /* Kein eigenes Gebäude: liegt auf der Straßenmitte der Luitpoldstraße.
-         Das echte "Oracle"-Gebäude wird seitlich davon in buildLuitpoldstrasse() gebaut. */
-      break;
-    }
-    case "dock": {
-      addPart(g, rbox(6,0.4,3.2,0.1,1), loc.color).position.y = 0.5;
-      addPart(g, rbox(6,0.9,0.15,0.08,1), roofColor).position.set(0,1.1,-1.5);
-      break;
-    }
-  }
-  g.position.set(loc.x, 0, loc.z);
-  scene.add(g);
-  if(loc.shape !== "cafe") fakeShadow(loc.x, loc.z, loc.radius*0.85);
-  return g;
-}
-
-function shade(hex, amt){
-  const c = new THREE.Color(hex);
-  c.multiplyScalar(amt);
-  return c;
-}
-
+export const BOUNDS = {
+  minX: Math.min(STREET_A.x, STREET_B.x) - 30,
+  maxX: Math.max(STREET_A.x, STREET_B.x) + 30,
+  minZ: STREET_A.z - 12,
+  maxZ: STREET_B.z + 12
+};
