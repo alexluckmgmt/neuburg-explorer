@@ -36,6 +36,7 @@
 
 <div id="joyBase"><div id="joyKnob"></div></div>
 <button id="interactBtn">Betreten</button>
+<button id="mapToggleBtn" aria-label="Karte">🗺️</button>
 
 <div id="modalOverlay">
   <div id="modalCard">
@@ -43,6 +44,16 @@
     <p id="modalFlavor">—</p>
     <div id="modalReward"></div>
     <button id="modalClose">Weiter erkunden</button>
+  </div>
+</div>
+
+<div id="mapOverlay">
+  <div id="mapCard">
+    <div id="mapHeader">
+      <span class="display">STADTPLAN</span>
+      <button id="mapCloseBtn" aria-label="Schließen">✕</button>
+    </div>
+    <canvas id="minimapCanvas"></canvas>
   </div>
 </div>
 

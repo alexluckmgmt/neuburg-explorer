@@ -6,6 +6,7 @@ import { scene, camera, renderer, buildWorld, BOUNDS } from "./world.js";
 import { player, playerShadow } from "./player.js";
 import { moveDir, keyboardVector } from "./controls.js";
 import { checkProximity, updateLabels, updateHUD, applyOfflineProgress } from "./ui.js";
+import { updateMinimapPlayer } from "./minimap.js";
 
 buildWorld();
 
@@ -42,6 +43,7 @@ function animate(now){
 
   checkProximity();
   updateLabels();
+  updateMinimapPlayer(player.position);
 
   state.amount += totalRate()*dt;
   updateHUD();

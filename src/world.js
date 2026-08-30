@@ -62,12 +62,11 @@ function groundPlane(w, h, x, z, y, tex, repeatEvery = 6){
 function makeGround(){
   const grassTex = createGrassTexture();
   const cobbleTex = createCobbleTexture();
-  const gardenTex = createGrassTexture("#78c469", "#63ab55");
   const waterTex = createWaterTexture();
 
   groundPlane(640, 480, -8, 55, -0.03, grassTex, 7);
   groundPlane(300, 70, -10, -10, -0.02, cobbleTex, 5);       // Altstadt-Hügel
-  groundPlane(80, 66, 95, 64, -0.015, gardenTex, 6);         // Hofgarten
+  groundPlane(55, 60, 135, 78, -0.02, cobbleTex, 5);         // Luitpoldstraße/"Hofgarten"
   groundPlane(280, 60, 60, 170, -0.01, waterTex, 10);        // Donau
 }
 makeGround();
@@ -75,14 +74,14 @@ makeGround();
 /* ============================================================
    STRASSEN — verbindet die Orte zu einem begehbaren Netz
    ============================================================ */
-const ROAD_PATHS = [
+export const ROAD_PATHS = [
   ["oberes_tor","karlsplatz"],
   ["karlsplatz","bibliothek"],
   ["karlsplatz","rathaus"],
   ["karlsplatz","hofkirche"],
   ["hofkirche","unteres_tor"],
   ["hofkirche","schloss"],
-  ["schloss","hofgarten"],
+  ["unteres_tor","hofgarten"],
   ["hofgarten","donaukai"]
 ];
 
@@ -188,18 +187,21 @@ function buildStructure(loc){
       });
       break;
     }
-    case "garden": {
-      /* Kleiner Pavillon + Brunnen als Herzstück des Hofgartens */
-      addPart(g, new THREE.CylinderGeometry(2.6,2.8,0.35,20), "#c9bfa8").position.y = 0.18;
-      const water = addPart(g, new THREE.CylinderGeometry(2.1,2.1,0.15,20), "#6fc2e0");
-      water.position.y = 0.42;
-      addPart(g, new THREE.CylinderGeometry(0.3,0.4,1.6,10), "#c9bfa8").position.y = 1.2;
-      const pillarPositions = [[-1.9,-1.9],[1.9,-1.9],[-1.9,1.9],[1.9,1.9]];
-      pillarPositions.forEach(([px,pz])=>{
-        addPart(g, new THREE.CylinderGeometry(0.16,0.16,2.6,8), "#f2ead8").position.set(px,1.6,pz);
+    case "cafe": {
+      /* Café-Fassade an der "Luitpoldstraße" — bunte Front, Markise, Tischchen */
+      addPart(g, rbox(7,4.2,4,0.15,2), loc.color).position.y = 2.1;
+      addPart(g, rbox(7.3,0.5,4.3,0.1,2), "#f2ead8").position.y = 4.25;
+      const awning = addPart(g, rbox(6.6,0.35,1.6,0.1,1), "#2a2430");
+      awning.position.set(0, 2.9, 2.4); awning.rotation.x = -0.28;
+      [-2.3, 0, 2.3].forEach(wx=>{
+        addPart(g, rbox(1.1,1.3,0.15,0.1,1), "#a8d8e8").position.set(wx, 2.2, 2.02);
       });
-      const pavRoof = addPart(g, new THREE.ConeGeometry(3.1,1.6,8), loc.color);
-      pavRoof.position.y = 3.6;
+      const tableTop = new THREE.CylinderGeometry(0.42,0.42,0.08,14);
+      const tableLeg = new THREE.CylinderGeometry(0.06,0.06,0.7,8);
+      [[-2.4,3.6],[0,4.0],[2.4,3.6]].forEach(([tx,tz])=>{
+        addPart(g, tableTop, "#f5f5f0").position.set(tx,0.72,tz);
+        addPart(g, tableLeg, "#3a3244").position.set(tx,0.36,tz);
+      });
       break;
     }
     case "dock": {
@@ -221,24 +223,27 @@ function shade(hex, amt){
 }
 
 /* ============================================================
-   HOFGARTEN-DEKO — Hecken & Bäumchen rund um den Pavillon
+   LUITPOLDSTRASSE-DEKO — gegenüberliegende Häuserzeile + Bäume,
+   damit sich's wie eine echte bebaute Straße anfühlt (nicht wie
+   ein Park) — Referenz waren die Fotos, die du geschickt hast.
    ============================================================ */
-function decorateHofgarten(loc){
+function decorateStreet(loc){
+  const wallMat = toonMaterial("#f2ead8");
+  const roofMat = toonMaterial("#8a5a4a");
+  const opp = new THREE.Group();
+  const body = new THREE.Mesh(rbox(6,3.8,3.6,0.15,2), wallMat);
+  body.position.y = 1.9;
+  opp.add(body); addOutline(body, opp);
+  const roof = new THREE.Mesh(rbox(6.3,0.5,3.9,0.1,2), roofMat);
+  roof.position.y = 3.9;
+  opp.add(roof); addOutline(roof, opp);
+  opp.position.set(loc.x + 9, 0, loc.z - 8);
+  scene.add(opp);
+  fakeShadow(opp.position.x, opp.position.z, 4.2);
+
   const hedgeMat = () => toonMaterial("#4f9a4a");
   const trunkMat = toonMaterial("#8a5a3a");
-  const ringCount = 10;
-  for(let i=0;i<ringCount;i++){
-    const a = (i/ringCount) * Math.PI*2;
-    const r = loc.radius + 1.4;
-    const hx = loc.x + Math.cos(a)*r;
-    const hz = loc.z + Math.sin(a)*r;
-    const hedge = new THREE.Mesh(new THREE.SphereGeometry(0.75,10,8), hedgeMat());
-    hedge.position.set(hx, 0.6, hz);
-    scene.add(hedge);
-    addOutline(hedge, scene, 0.06);
-  }
-  const treeSpots = [[-6,4],[6,-5],[-7,-3],[7,5]];
-  treeSpots.forEach(([ox,oz])=>{
+  [[-8,-3],[9,6]].forEach(([ox,oz])=>{
     const tx = loc.x+ox, tz = loc.z+oz;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.28,1.6,7), trunkMat);
     trunk.position.set(tx,0.8,tz);
@@ -254,7 +259,7 @@ function decorateHofgarten(loc){
 export function buildWorld(){
   LOCATIONS.forEach(buildStructure);
   const hofgarten = LOCATIONS.find(l => l.id === "hofgarten");
-  if(hofgarten) decorateHofgarten(hofgarten);
+  if(hofgarten) decorateStreet(hofgarten);
 }
 
-export const BOUNDS = { minX:-150, maxX:135, minZ:-45, maxZ:150 };
+export const BOUNDS = { minX:-150, maxX:148, minZ:-45, maxZ:150 };

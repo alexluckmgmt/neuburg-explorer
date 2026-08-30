@@ -4,7 +4,9 @@
    (x,z) skaliert, damit die Lage zueinander stimmt: Amalienstraße
    verbindet Oberes Tor -> Karlsplatz, Rathaus liegt nördlich vom
    Platz, Hofkirche östlich, Residenzschloss südöstlich Richtung
-   Donau, Hofgarten direkt südlich/vor dem Schloss, Donaukai am Fluss.
+   Donau, Donaukai am Fluss. "Hofgarten" sitzt auf der echten
+   Luitpoldstraße (Café-/Kneipenmeile östlich vom Schloss) — Insider-
+   Spitzname der Freundesgruppe, nicht der historische Schlossgarten.
    shape steuert die Bauform. Neue Orte: einfach ein Objekt mehr
    in dieses Array — und ggf. einen ROAD-Eintrag in world.js.
    ============================================================ */
@@ -52,9 +54,9 @@ export const LOCATIONS = [
     reward:260, rate:3.0
   },
   {
-    id:"hofgarten", name:"Hofgarten", x:100, z:66, shape:"garden",
-    color:"#5FA85B", radius:7,
-    flavor:"Direkt vor dem Schloss: Wege, Hecken und ein kleiner Weinberg (Hutzeldörr). An der Bastion 'Burgwehr' stehen noch Reste der alten Stadtmauer.",
+    id:"hofgarten", name:"Hofgarten", x:135, z:78, shape:"cafe",
+    color:"#E8896B", radius:6,
+    flavor:"Eigentlich die Luitpoldstraße – aber unter Freunden heißt das hier nur 'Hofgarten'. Café-Tische, bunte Fassaden, Blick Richtung Schloss.",
     reward:190, rate:2.2
   },
   {
