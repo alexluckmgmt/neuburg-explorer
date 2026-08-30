@@ -1,0 +1,15 @@
+{
+  "name": "Neuburg Chaos Explorer",
+  "short_name": "Neuburg Explorer",
+  "description": "Begehbare, meme-chaotische 3D-Nachbildung der Altstadt von Neuburg an der Donau. Open-World-Idle-Hybrid.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16121F",
+  "theme_color": "#16121F",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
