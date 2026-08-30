@@ -1,12 +1,20 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { LOCATIONS } from "./locations.js";
+import {
+  toonMaterial, addOutline, getGradientMap,
+  createSkyTexture, createGrassTexture, createCobbleTexture,
+  createRoadTexture, createWaterTexture, createShadowTexture
+} from "./textures.js";
 
 export const canvasWrap = document.getElementById("canvasWrap");
 export const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x7ec8e3);
-scene.fog = new THREE.Fog(0x7ec8e3, 40, 95);
 
-export const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.1, 300);
+const skyTex = createSkyTexture();
+scene.background = skyTex;
+scene.fog = new THREE.Fog(0xdcf3ff, 90, 320);
+
+export const camera = new THREE.PerspectiveCamera(48, window.innerWidth/window.innerHeight, 0.1, 500);
 export const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -18,55 +26,114 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-/* Lighting */
-scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.9));
-const sun = new THREE.DirectionalLight(0xfff2d6, 0.9);
-sun.position.set(20, 30, 10);
+/* Weiches, klares Mobile-Idle-Licht: viel Ambient, eine sanfte Sonne */
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9fb8c9, 1.05));
+const sun = new THREE.DirectionalLight(0xfff2d6, 1.0);
+sun.position.set(40, 60, 20);
 scene.add(sun);
 
-/* Ground: grass base + beige Altstadt zone + river */
+const shadowTex = createShadowTexture();
+
+/* ============================================================
+   BODEN — Gras, Altstadt-Hügel, Hofgarten-Grün, Donau
+   ============================================================ */
+function tiled(tex, repeatX, repeatY){
+  const t = tex.clone();
+  t.needsUpdate = true;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeatX, repeatY);
+  return t;
+}
+
+function groundPlane(w, h, x, z, y, tex, repeatEvery = 6){
+  const geo = new THREE.PlaneGeometry(w, h);
+  geo.rotateX(-Math.PI/2);
+  const mat = new THREE.MeshToonMaterial({
+    color: 0xffffff,
+    map: tiled(tex, w/repeatEvery, h/repeatEvery),
+    gradientMap: getGradientMap()
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  return mesh;
+}
+
 function makeGround(){
-  const grass = new THREE.Mesh(
-    new THREE.PlaneGeometry(200,200),
-    new THREE.MeshLambertMaterial({color:0x6bbf59})
-  );
-  grass.rotation.x = -Math.PI/2;
-  grass.position.y = -0.02;
-  scene.add(grass);
+  const grassTex = createGrassTexture();
+  const cobbleTex = createCobbleTexture();
+  const gardenTex = createGrassTexture("#78c469", "#63ab55");
+  const waterTex = createWaterTexture();
 
-  const altstadt = new THREE.Mesh(
-    new THREE.PlaneGeometry(46,34),
-    new THREE.MeshLambertMaterial({color:0xdcc9a3})
-  );
-  altstadt.rotation.x = -Math.PI/2;
-  altstadt.position.set(-2, -0.01, -6);
-  scene.add(altstadt);
-
-  const river = new THREE.Mesh(
-    new THREE.PlaneGeometry(70,14),
-    new THREE.MeshLambertMaterial({color:0x2f7fb3})
-  );
-  river.rotation.x = -Math.PI/2;
-  river.position.set(0, 0, -26);
-  scene.add(river);
+  groundPlane(640, 480, -8, 55, -0.03, grassTex, 7);
+  groundPlane(300, 70, -10, -10, -0.02, cobbleTex, 5);       // Altstadt-Hügel
+  groundPlane(80, 66, 95, 64, -0.015, gardenTex, 6);         // Hofgarten
+  groundPlane(280, 60, 60, 170, -0.01, waterTex, 10);        // Donau
 }
 makeGround();
 
-function shade(hex, amt){
-  const c = new THREE.Color(hex);
-  c.multiplyScalar(amt);
-  return c;
-}
+/* ============================================================
+   STRASSEN — verbindet die Orte zu einem begehbaren Netz
+   ============================================================ */
+const ROAD_PATHS = [
+  ["oberes_tor","karlsplatz"],
+  ["karlsplatz","bibliothek"],
+  ["karlsplatz","rathaus"],
+  ["karlsplatz","hofkirche"],
+  ["hofkirche","unteres_tor"],
+  ["hofkirche","schloss"],
+  ["schloss","hofgarten"],
+  ["hofgarten","donaukai"]
+];
 
+function buildRoads(){
+  const roadTex = createRoadTexture();
+  const byId = Object.fromEntries(LOCATIONS.map(l => [l.id, l]));
+  ROAD_PATHS.forEach(([fromId, toId]) => {
+    const a = byId[fromId], b = byId[toId];
+    if(!a || !b) return;
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const dist = Math.hypot(dx, dz);
+    const width = 5;
+    const geo = new THREE.PlaneGeometry(dist, width);
+    geo.rotateX(-Math.PI/2);
+    const mat = new THREE.MeshToonMaterial({
+      color: 0xffffff,
+      map: tiled(roadTex, dist/4, 1),
+      gradientMap: getGradientMap()
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((a.x+b.x)/2, 0, (a.z+b.z)/2);
+    mesh.rotation.y = Math.atan2(-dz, dx);
+    scene.add(mesh);
+  });
+}
+buildRoads();
+
+/* ============================================================
+   SCHATTEN & HILFSFUNKTIONEN
+   ============================================================ */
 export function fakeShadow(x,z,r){
   const m = new THREE.Mesh(
-    new THREE.CircleGeometry(r,20),
-    new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:0.22})
+    new THREE.PlaneGeometry(r*2.1, r*2.1),
+    new THREE.MeshBasicMaterial({map:shadowTex, transparent:true, depthWrite:false})
   );
   m.rotation.x = -Math.PI/2;
-  m.position.set(x, 0.015, z);
+  m.position.set(x, 0.02, z);
   scene.add(m);
   return m;
+}
+
+function rbox(w,h,d,radius=0.18,seg=2){
+  return new RoundedBoxGeometry(w,h,d,seg,radius);
+}
+
+/* Fügt Hauptkörper + Dach als toon-material + Outline zur Gruppe hinzu */
+function addPart(group, geo, color){
+  const mesh = new THREE.Mesh(geo, toonMaterial(color));
+  group.add(mesh);
+  addOutline(mesh, group);
+  return mesh;
 }
 
 /* ============================================================
@@ -74,89 +141,120 @@ export function fakeShadow(x,z,r){
    ============================================================ */
 function buildStructure(loc){
   const g = new THREE.Group();
-  const mainMat = new THREE.MeshLambertMaterial({color:loc.color});
-  const roofMat = new THREE.MeshLambertMaterial({color:shade(loc.color,0.65)});
+  const roofColor = shade(loc.color, 0.62);
 
   switch(loc.shape){
     case "gate": {
-      const pillarGeo = new THREE.BoxGeometry(1.4,5,1.4);
-      const p1 = new THREE.Mesh(pillarGeo, mainMat); p1.position.set(-2.2,2.5,0);
-      const p2 = new THREE.Mesh(pillarGeo, mainMat); p2.position.set(2.2,2.5,0);
-      const top = new THREE.Mesh(new THREE.BoxGeometry(6.4,1.6,1.8), mainMat);
-      top.position.set(0,5.3,0);
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(1.1,1.4,4), roofMat);
-      roof.position.set(0,6.7,0); roof.rotation.y = Math.PI/4;
-      g.add(p1,p2,top,roof);
+      addPart(g, rbox(1.5,5,1.5,0.25,2), loc.color).position.set(-2.2,2.5,0);
+      addPart(g, rbox(1.5,5,1.5,0.25,2), loc.color).position.set(2.2,2.5,0);
+      addPart(g, rbox(6.6,1.7,1.9,0.2,2), loc.color).position.set(0,5.3,0);
+      const roof = addPart(g, new THREE.ConeGeometry(1.15,1.5,4), roofColor);
+      roof.position.set(0,6.8,0); roof.rotation.y = Math.PI/4;
       break;
     }
     case "plaza": {
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(3.2,3.4,0.3,24), mainMat);
-      base.position.y = 0.15;
-      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.45,2.2,10), roofMat);
-      spout.position.y = 1.25;
-      g.add(base, spout);
+      addPart(g, new THREE.CylinderGeometry(3.2,3.4,0.3,24), loc.color).position.y = 0.15;
+      addPart(g, new THREE.CylinderGeometry(0.35,0.45,2.2,10), roofColor).position.y = 1.25;
+      const bowl = addPart(g, new THREE.SphereGeometry(0.9,14,10,0,Math.PI*2,0,Math.PI*0.5), "#a8d8e8");
+      bowl.position.y = 1.9; bowl.rotation.x = Math.PI;
       break;
     }
     case "hall": {
-      const body = new THREE.Mesh(new THREE.BoxGeometry(7,4.4,5), mainMat);
-      body.position.y = 2.2;
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(5,2.2,4), roofMat);
+      addPart(g, rbox(7,4.4,5,0.22,2), loc.color).position.y = 2.2;
+      const roof = addPart(g, new THREE.ConeGeometry(5.1,2.2,4), roofColor);
       roof.position.y = 5.4; roof.rotation.y = Math.PI/4;
-      g.add(body, roof);
       break;
     }
     case "church": {
-      const nave = new THREE.Mesh(new THREE.BoxGeometry(5,4.8,7), mainMat);
-      nave.position.y = 2.4;
-      const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.01,3.6,2.4,4), roofMat);
+      addPart(g, rbox(5,4.8,7,0.2,2), loc.color).position.y = 2.4;
+      const roof = addPart(g, new THREE.CylinderGeometry(0.01,3.65,2.4,4), roofColor);
       roof.position.y = 6; roof.rotation.y = Math.PI/4;
-      const steeple = new THREE.Mesh(new THREE.CylinderGeometry(0.9,1.1,6,8), mainMat);
-      steeple.position.set(0,5.4,-4);
-      const spire = new THREE.Mesh(new THREE.ConeGeometry(1.05,3,8), roofMat);
+      addPart(g, new THREE.CylinderGeometry(0.9,1.1,6,8), loc.color).position.set(0,5.4,-4);
+      const spire = addPart(g, new THREE.ConeGeometry(1.08,3,8), roofColor);
       spire.position.set(0,9.9,-4);
-      g.add(nave, roof, steeple, spire);
       break;
     }
     case "library": {
-      const body = new THREE.Mesh(new THREE.BoxGeometry(6,4,4.6), mainMat);
-      body.position.y = 2;
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(6.4,0.6,5), roofMat);
-      roof.position.y = 4.3;
-      g.add(body, roof);
+      addPart(g, rbox(6,4,4.6,0.2,2), loc.color).position.y = 2;
+      addPart(g, rbox(6.5,0.6,5.1,0.15,2), roofColor).position.y = 4.3;
       break;
     }
     case "castle": {
-      const keep = new THREE.Mesh(new THREE.BoxGeometry(11,7,9), mainMat);
-      keep.position.y = 3.5;
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(11.4,0.7,9.4), roofMat);
-      roof.position.y = 7.35;
-      g.add(keep, roof);
-      const towerGeo = new THREE.CylinderGeometry(1.3,1.4,9,10);
-      const capGeo = new THREE.ConeGeometry(1.6,2.4,10);
+      addPart(g, rbox(11,7,9,0.2,2), loc.color).position.y = 3.5;
+      addPart(g, rbox(11.5,0.7,9.5,0.15,2), roofColor).position.y = 7.35;
       [[-5.6,-4.4],[5.6,-4.4],[-5.6,4.4],[5.6,4.4]].forEach(([tx,tz])=>{
-        const t = new THREE.Mesh(towerGeo, mainMat); t.position.set(tx,4.5,tz);
-        const cap = new THREE.Mesh(capGeo, roofMat); cap.position.set(tx,10.2,tz);
-        g.add(t,cap);
+        addPart(g, new THREE.CylinderGeometry(1.3,1.4,9,10), loc.color).position.set(tx,4.5,tz);
+        addPart(g, new THREE.ConeGeometry(1.65,2.4,10), roofColor).position.set(tx,10.2,tz);
       });
       break;
     }
+    case "garden": {
+      /* Kleiner Pavillon + Brunnen als Herzstück des Hofgartens */
+      addPart(g, new THREE.CylinderGeometry(2.6,2.8,0.35,20), "#c9bfa8").position.y = 0.18;
+      const water = addPart(g, new THREE.CylinderGeometry(2.1,2.1,0.15,20), "#6fc2e0");
+      water.position.y = 0.42;
+      addPart(g, new THREE.CylinderGeometry(0.3,0.4,1.6,10), "#c9bfa8").position.y = 1.2;
+      const pillarPositions = [[-1.9,-1.9],[1.9,-1.9],[-1.9,1.9],[1.9,1.9]];
+      pillarPositions.forEach(([px,pz])=>{
+        addPart(g, new THREE.CylinderGeometry(0.16,0.16,2.6,8), "#f2ead8").position.set(px,1.6,pz);
+      });
+      const pavRoof = addPart(g, new THREE.ConeGeometry(3.1,1.6,8), loc.color);
+      pavRoof.position.y = 3.6;
+      break;
+    }
     case "dock": {
-      const deck = new THREE.Mesh(new THREE.BoxGeometry(6,0.4,3.2), mainMat);
-      deck.position.y = 0.5;
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(6,0.9,0.15), roofMat);
-      rail.position.set(0,1.1,-1.5);
-      g.add(deck, rail);
+      addPart(g, rbox(6,0.4,3.2,0.1,1), loc.color).position.y = 0.5;
+      addPart(g, rbox(6,0.9,0.15,0.08,1), roofColor).position.set(0,1.1,-1.5);
       break;
     }
   }
   g.position.set(loc.x, 0, loc.z);
   scene.add(g);
-  fakeShadow(loc.x, loc.z, loc.radius*0.75);
+  fakeShadow(loc.x, loc.z, loc.radius*0.85);
   return g;
+}
+
+function shade(hex, amt){
+  const c = new THREE.Color(hex);
+  c.multiplyScalar(amt);
+  return c;
+}
+
+/* ============================================================
+   HOFGARTEN-DEKO — Hecken & Bäumchen rund um den Pavillon
+   ============================================================ */
+function decorateHofgarten(loc){
+  const hedgeMat = () => toonMaterial("#4f9a4a");
+  const trunkMat = toonMaterial("#8a5a3a");
+  const ringCount = 10;
+  for(let i=0;i<ringCount;i++){
+    const a = (i/ringCount) * Math.PI*2;
+    const r = loc.radius + 1.4;
+    const hx = loc.x + Math.cos(a)*r;
+    const hz = loc.z + Math.sin(a)*r;
+    const hedge = new THREE.Mesh(new THREE.SphereGeometry(0.75,10,8), hedgeMat());
+    hedge.position.set(hx, 0.6, hz);
+    scene.add(hedge);
+    addOutline(hedge, scene, 0.06);
+  }
+  const treeSpots = [[-6,4],[6,-5],[-7,-3],[7,5]];
+  treeSpots.forEach(([ox,oz])=>{
+    const tx = loc.x+ox, tz = loc.z+oz;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.28,1.6,7), trunkMat);
+    trunk.position.set(tx,0.8,tz);
+    scene.add(trunk);
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.15,10,8), hedgeMat());
+    leaves.position.set(tx,2.1,tz);
+    scene.add(leaves);
+    addOutline(leaves, scene, 0.06);
+    fakeShadow(tx,tz,1.1);
+  });
 }
 
 export function buildWorld(){
   LOCATIONS.forEach(buildStructure);
+  const hofgarten = LOCATIONS.find(l => l.id === "hofgarten");
+  if(hofgarten) decorateHofgarten(hofgarten);
 }
 
-export const BOUNDS = { minX:-27, maxX:27, minZ:-27, maxZ:15 };
+export const BOUNDS = { minX:-150, maxX:135, minZ:-45, maxZ:150 };
