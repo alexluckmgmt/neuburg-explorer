@@ -1,5 +1,5 @@
 import { LOCATIONS } from "./locations.js";
-import { STREET_A, STREET_B, BOUNDS } from "./world.js";
+import { LUITPOLD_PATH, BOUNDS } from "./world.js";
 import { state } from "./state.js";
 
 const overlay = document.getElementById("mapOverlay");
@@ -42,11 +42,11 @@ function draw(){
   ctx.strokeStyle = "#b9b0c2";
   ctx.lineWidth = Math.max(2, size*0.012);
   ctx.lineCap = "round";
-  const [sax,saz] = toCanvas(STREET_A.x, STREET_A.z, size);
-  const [sbx,sbz] = toCanvas(STREET_B.x, STREET_B.z, size);
   ctx.beginPath();
-  ctx.moveTo(sax,saz);
-  ctx.lineTo(sbx,sbz);
+  LUITPOLD_PATH.forEach((p,i) => {
+    const [px,pz] = toCanvas(p.x, p.z, size);
+    if(i===0) ctx.moveTo(px,pz); else ctx.lineTo(px,pz);
+  });
   ctx.stroke();
 
   LOCATIONS.forEach(loc => {

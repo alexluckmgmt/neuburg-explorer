@@ -7,7 +7,7 @@
    ============================================================ */
 export const LOCATIONS = [
   {
-    id:"hofgarten", name:"Hofgarten", x:134, z:71, shape:"cafe",
+    id:"hofgarten", name:"Hofgarten", x:67.4, z:173.1, shape:"cafe",
     color:"#E8896B", radius:6,
     flavor:"Eigentlich die Luitpoldstraße – aber unter Freunden heißt das hier nur 'Hofgarten'. The Oracle: bordeauxrote Stühle, Holztische, Blick die Straße runter.",
     reward:190, rate:2.2

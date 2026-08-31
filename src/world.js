@@ -63,36 +63,88 @@ function tiled(tex, repeatX, repeatY){
 }
 
 /* ============================================================
-   LUITPOLDSTRASSE — EINE gerade Straße (bewusst vereinfacht,
-   damit die Geometrie stimmt), nach Street-View-Begehung:
-   Krieger-Denkmal-Grünfläche (Norden) -> großes Eckhaus mit
-   Mansarde -> "Optik"-Haus -> "The Oracle" (bordeauxrote
-   Stühle, Holztische). Alles andere von der Karte ist bewusst
-   entfernt, bis diese eine Straße wirklich stimmt.
+   LUITPOLDSTRASSE — der komplette echte Straßenverlauf, aus
+   den tatsächlichen Adress-Koordinaten (Google Street View)
+   von "Modehaus Bullinger" (Süden, Münchener Str.) bis zum
+   "Neo Kastro"/Donaukai im Norden, inkl. der Rechtskurve am
+   Schloss vorbei zur Donau. Jeder Punkt entspricht einer real
+   begangenen Hausnummer. Positionen ~0.6x echte Meter, Ursprung
+   bei Karlsplatz (48.73738, 11.17858).
    ============================================================ */
-const STREET_A = { x:147.7, z:39.2 };  // Norden, bei der Grünfläche
-const STREET_B = { x:121.1, z:102.3 }; // Süden, hinter "The Oracle"
-
-const SDX = STREET_B.x - STREET_A.x, SDZ = STREET_B.z - STREET_A.z;
-const STREET_LEN = Math.hypot(SDX, SDZ);
-const DIRX = SDX/STREET_LEN, DIRZ = SDZ/STREET_LEN;
-const PERPX = -DIRZ, PERPZ = DIRX;
-const FACE_ANGLE = Math.atan2(-DIRZ, DIRX); // rotation.y, damit lokale +X-Achse in Straßenrichtung zeigt
+export const LUITPOLD_PATH = [
+  { x: 59.0,  z: 211.7, note:"Bullinger/Münchener Str (Start)" },
+  { x: 63.0,  z: 192.0, note:"Treppen-Ladenzeile Anfang" },
+  { x: 67.4,  z: 173.1, note:"80 — Oracle/Bäckerei" },
+  { x: 73.4,  z: 166.3, note:"79" },
+  { x: 77.6,  z: 161.9, note:"78" },
+  { x: 81.9,  z: 157.4, note:"77 — Mauer/Efeu beginnt" },
+  { x: 90.7,  z: 148.5, note:"75 — Optik" },
+  { x: 107.7, z: 129.3, note:"74 — Rosenstraße/Betten Uerheimer" },
+  { x: 117.1, z: 113.6, note:"73" },
+  { x: 125.7, z: 97.2,  note:"70 — VR Bank / Herrnbräu-Café" },
+  { x: 131.0, z: 78.9,  note:"66 — Backhaus Hackner" },
+  { x: 133.4, z: 73.3,  note:"66 Fortsetzung" },
+  { x: 137.9, z: 62.1,  note:"Schloss-Nahblick" },
+  { x: 143.9, z: 50.4,  note:"IL Pinguino" },
+  { x: 147.4, z: 38.0,  note:"65" },
+  { x: 148.9, z: 11.0,  note:"2" },
+  { x: 153.7, z: 5.0,   note:"1 — Schloss-Basis" },
+  { x: 156.1, z: -0.84, note:"Oskar-Wittmann-Str" },
+  { x: 158.9, z: -6.43 },
+  { x: 161.6, z: -11.6 },
+  { x: 164.8, z: -16.2 },
+  { x: 169.4, z: -20.7, note:"Flussuferzone" },
+  { x: 176.4, z: -17.4, note:"Neo Kastro / Donaukai (Ziel)" }
+];
 
 const ROAD_W = 10.5, WALK_W = 2.6;
-const SHOP_SIDE = 1;   // Ladenzeile liegt auf der +PERP Seite
-const WALL_SIDE = -1;  // Bruchstein-/Efeu-Mauer auf der gegenüberliegenden Seite
+const SHOP_SIDE = 1;   // recherchierte Häuserzeile
+const WALL_SIDE = -1;  // Mauer / Schloss / Donauseite
 
-function atT(t, side = 0, sideOffset = 0){
-  return {
-    x: STREET_A.x + DIRX*t + PERPX*side*sideOffset,
-    z: STREET_A.z + DIRZ*t + PERPZ*side*sideOffset
-  };
+/* Segmentlänge + kumulierte Distanz für Platzierung "irgendwo entlang der Strecke" */
+const SEG = [];
+let cum = 0;
+for(let i=0;i<LUITPOLD_PATH.length-1;i++){
+  const a = LUITPOLD_PATH[i], b = LUITPOLD_PATH[i+1];
+  const dx = b.x-a.x, dz = b.z-a.z, len = Math.hypot(dx,dz);
+  SEG.push({ dirx: dx/len, dirz: dz/len, perpx: -dz/len, perpz: dx/len, len, from: cum, to: cum+len, a, b });
+  cum += len;
+}
+const PATH_LEN = cum;
+
+/* Richtung/Perpendikulare an einem Wegpunkt-Index (Mittel aus an- und abgehendem Segment) */
+function pathDir(index){
+  const segA = SEG[Math.max(0, index-1)];
+  const segB = SEG[Math.min(SEG.length-1, index)];
+  const dirx = (segA.dirx+segB.dirx)/2, dirz = (segA.dirz+segB.dirz)/2;
+  const len = Math.hypot(dirx,dirz) || 1;
+  return { dirx: dirx/len, dirz: dirz/len, perpx: -dirz/len, perpz: dirx/len };
+}
+
+/* Position + Richtung an Distanz `d` entlang der ganzen Strecke (für Laternen/Autos/Bäume) */
+function atDist(d, side = 0, sideOffset = 0){
+  d = Math.max(0, Math.min(PATH_LEN, d));
+  const seg = SEG.find(s => d <= s.to) || SEG[SEG.length-1];
+  const local = d - seg.from;
+  const x = seg.a.x + seg.dirx*local + seg.perpx*side*sideOffset;
+  const z = seg.a.z + seg.dirz*local + seg.perpz*side*sideOffset;
+  return { x, z, perpx: seg.perpx, perpz: seg.perpz, dirx: seg.dirx, dirz: seg.dirz };
+}
+
+/* Position + Richtung an einem konkreten Wegpunkt-Index (für recherchierte Einzelgebäude) */
+function atIndex(index, side = 0, sideOffset = 0){
+  const p = LUITPOLD_PATH[index];
+  const d = pathDir(index);
+  return { x: p.x + d.perpx*side*sideOffset, z: p.z + d.perpz*side*sideOffset, perpx: d.perpx, perpz: d.perpz };
 }
 
 /* rotation.y, damit die lokale +Z-Achse (Fassaden-Vorderseite) zur Straßenmitte zeigt */
-function facingRoadAngle(side){
-  return Math.atan2(-side*PERPX, -side*PERPZ);
+function facingRoadAngle(perpx, perpz, side){
+  return Math.atan2(-side*perpx, -side*perpz);
+}
+/* rotation.y, damit die lokale +X-Achse (lange Kante, z.B. Mauer/Geländer) parallel zur Straße liegt */
+function alongRoadAngle(dirx, dirz){
+  return Math.atan2(-dirz, dirx);
 }
 
 function flatSegment(ax, az, bx, bz, width, mat, y = 0){
@@ -112,61 +164,77 @@ function buildStreetSurface(){
   const asphaltTex = createAsphaltTexture();
   const sidewalkTex = createSidewalkTexture();
   const lineMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
-
-  const a = atT(-6), b = atT(STREET_LEN+6);
-  const roadMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(asphaltTex, STREET_LEN/4, 1), gradientMap: getGradientMap() });
-  flatSegment(a.x,a.z,b.x,b.z, ROAD_W, roadMat, 0);
-
   const offset = ROAD_W/2 + WALK_W/2;
-  const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, STREET_LEN/2.5, WALK_W/2.5), gradientMap: getGradientMap() });
-  const wa1 = atT(-6, 1, offset), wb1 = atT(STREET_LEN+6, 1, offset);
-  flatSegment(wa1.x,wa1.z,wb1.x,wb1.z, WALK_W, walkMat, 0.006);
-  const wa2 = atT(-6, -1, offset), wb2 = atT(STREET_LEN+6, -1, offset);
-  flatSegment(wa2.x,wa2.z,wb2.x,wb2.z, WALK_W, walkMat, 0.006);
 
-  const dash = 1.1, gap = 0.9;
-  let t = -6;
-  while(t < STREET_LEN+6){
-    const p0 = atT(t), p1 = atT(Math.min(STREET_LEN+6, t+dash));
-    flatSegment(p0.x,p0.z,p1.x,p1.z, 0.22, lineMat, 0.012);
-    t += dash+gap;
-  }
+  SEG.forEach(seg => {
+    const roadMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(asphaltTex, Math.max(1,seg.len/4), 1), gradientMap: getGradientMap() });
+    flatSegment(seg.a.x, seg.a.z, seg.b.x, seg.b.z, ROAD_W, roadMat, 0);
 
+    const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, Math.max(1,seg.len/2.5), WALK_W/2.5), gradientMap: getGradientMap() });
+    [1,-1].forEach(side=>{
+      const wa = { x: seg.a.x + seg.perpx*side*offset, z: seg.a.z + seg.perpz*side*offset };
+      const wb = { x: seg.b.x + seg.perpx*side*offset, z: seg.b.z + seg.perpz*side*offset };
+      flatSegment(wa.x, wa.z, wb.x, wb.z, WALK_W, walkMat, 0.006);
+    });
+
+    const dash = 1.1, gap = 0.9;
+    let t = 0;
+    while(t < seg.len){
+      const t1 = Math.min(seg.len, t+dash);
+      const p0 = { x: seg.a.x+seg.dirx*t, z: seg.a.z+seg.dirz*t };
+      const p1 = { x: seg.a.x+seg.dirx*t1, z: seg.a.z+seg.dirz*t1 };
+      flatSegment(p0.x,p0.z,p1.x,p1.z, 0.22, lineMat, 0.012);
+      t += dash+gap;
+    }
+  });
 }
 
 /* Große Grasfläche unter allem — Gebäude stehen direkt dahinter, kein Feld-Look */
 function buildBaseGround(){
   const grassTex = createGrassTexture();
-  const grassMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(grassTex, 24, 26), gradientMap: getGradientMap() });
-  const mid = atT(STREET_LEN/2);
-  const geo = new THREE.PlaneGeometry(120, 140);
+  const grassMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(grassTex, 40, 46), gradientMap: getGradientMap() });
+  const xs = LUITPOLD_PATH.map(p=>p.x), zs = LUITPOLD_PATH.map(p=>p.z);
+  const midX = (Math.min(...xs)+Math.max(...xs))/2, midZ = (Math.min(...zs)+Math.max(...zs))/2;
+  const w = (Math.max(...xs)-Math.min(...xs)) + 90, h = (Math.max(...zs)-Math.min(...zs)) + 60;
+  const geo = new THREE.PlaneGeometry(w, h);
   geo.rotateX(-Math.PI/2);
   const ground = new THREE.Mesh(geo, grassMat);
-  ground.position.set(mid.x, -0.03, mid.z);
+  ground.position.set(midX, -0.03, midZ);
   scene.add(ground);
 }
 
-/* Zebrastreifen: Balken quer über die volle Fahrbahnbreite, mit Lücken in Straßenrichtung */
-function crosswalk(t){
+/* Zebrastreifen: Balken quer über die volle Fahrbahnbreite, mit Lücken in Straßenrichtung, an einem Wegpunkt */
+function crosswalk(index){
+  const p = LUITPOLD_PATH[index];
+  const d = pathDir(index);
+  const angle = alongRoadAngle(d.dirx, d.dirz);
   const stripeMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
-  const stripeThickness = 0.6, gap = 0.55;
-  const count = 6;
+  const stripeThickness = 0.6, gap = 0.55, count = 6;
   const totalSpan = count*stripeThickness + (count-1)*gap;
-  let start = t - totalSpan/2;
   for(let i=0;i<count;i++){
-    const st = start + i*(stripeThickness+gap);
+    const off = -totalSpan/2 + i*(stripeThickness+gap);
     const geo = new THREE.PlaneGeometry(stripeThickness, ROAD_W*0.86);
     geo.rotateX(-Math.PI/2);
     const mesh = new THREE.Mesh(geo, stripeMat);
-    const p = atT(st);
-    mesh.position.set(p.x, 0.014, p.z);
-    mesh.rotation.y = FACE_ANGLE;
+    mesh.position.set(p.x + d.dirx*off, 0.014, p.z + d.dirz*off);
+    mesh.rotation.y = angle;
     scene.add(mesh);
   }
+  /* Verkehrsinsel mit Fußgänger-Schild in der Fahrbahnmitte */
+  const island = new THREE.Mesh(rbox(1.8,0.15,ROAD_W*0.5,0.05,1), toonMaterial("#c9c2b6"));
+  island.position.set(p.x, 0.075, p.z);
+  island.rotation.y = angle;
+  scene.add(island); addOutline(island, scene, 0.05);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.6,8), toonMaterial("#2c2a33"));
+  pole.position.set(p.x, 0.95, p.z);
+  scene.add(pole);
+  const sign = new THREE.Mesh(rbox(0.4,0.4,0.04,0.05,1), toonMaterial("#2a5fb8"));
+  sign.position.set(p.x, 1.7, p.z);
+  scene.add(sign); addOutline(sign, scene, 0.05);
 }
 
-function streetLamp(t, side){
-  const p = atT(t, side, ROAD_W/2+WALK_W+0.6);
+function streetLamp(dist, side){
+  const p = atDist(dist, side, ROAD_W/2+WALK_W+0.6);
   const g = new THREE.Group();
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.11,4.2,8), toonMaterial("#2c2a33"));
   pole.position.y = 2.1;
@@ -178,13 +246,13 @@ function streetLamp(t, side){
   head.position.set(1.0,3.95,0);
   g.add(head); addOutline(head, g, 0.06);
   g.position.set(p.x,0,p.z);
-  g.rotation.y = facingRoadAngle(side);
+  g.rotation.y = facingRoadAngle(p.perpx, p.perpz, side);
   scene.add(g);
   fakeShadow(p.x,p.z,0.5);
 }
 
-function parkedCar(t, side, color){
-  const p = atT(t, side, ROAD_W/2+0.7);
+function parkedCar(dist, side, color){
+  const p = atDist(dist, side, ROAD_W/2+0.7);
   const g = new THREE.Group();
   const body = new THREE.Mesh(rbox(1.9,0.75,0.95,0.15,2), toonMaterial(color));
   body.position.y = 0.5;
@@ -200,16 +268,16 @@ function parkedCar(t, side, color){
     g.add(wheel);
   });
   g.position.set(p.x,0,p.z);
-  g.rotation.y = FACE_ANGLE; // Auto steht parallel zur Straße
+  g.rotation.y = alongRoadAngle(p.dirx, p.dirz);
   scene.add(g);
   fakeShadow(p.x,p.z,1.3);
 }
 
-function ivyWallSegment(t){
-  const p = atT(t, WALL_SIDE, ROAD_W/2+WALK_W+1.2);
+function ivyWallSegment(dist){
+  const p = atDist(dist, WALL_SIDE, ROAD_W/2+WALK_W+1.2);
   const wall = new THREE.Mesh(rbox(4.6,1.6,0.6,0.08,1), toonMaterial("#8f8474"));
   wall.position.set(p.x, 0.8, p.z);
-  wall.rotation.y = FACE_ANGLE;
+  wall.rotation.y = alongRoadAngle(p.dirx, p.dirz);
   scene.add(wall); addOutline(wall, scene, 0.05);
   const ivy = new THREE.Mesh(new THREE.SphereGeometry(1.3,10,8), toonMaterial("#4f9a4a"));
   ivy.scale.set(1,0.7,0.6);
@@ -217,30 +285,28 @@ function ivyWallSegment(t){
   scene.add(ivy); addOutline(ivy, scene, 0.06);
 }
 
-/* Schlichtes Geländer am Gehwegrand — die offene Straßenseite ohne Häuserzeile,
-   genau wie auf dem Referenzfoto (Läden nur auf EINER Seite). */
-function railingSegment(t0, t1){
-  const p0 = atT(t0, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
-  const p1 = atT(t1, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
-  const dist = Math.hypot(p1.x-p0.x, p1.z-p0.z);
+/* Schlichtes Geländer am Gehwegrand — offene Straßenseite / Donauufer */
+function railingSegment(d0, d1){
+  const steps = Math.max(2, Math.round((d1-d0)/1.4));
   const railMat = toonMaterial("#2c2a33");
-  const rail = new THREE.Mesh(rbox(dist,0.08,0.06,0.02,1), railMat);
-  rail.position.set((p0.x+p1.x)/2, 0.75, (p0.z+p1.z)/2);
-  rail.rotation.y = FACE_ANGLE;
-  scene.add(rail); addOutline(rail, scene, 0.04);
-  const postCount = Math.max(2, Math.round(dist/1.4));
-  for(let i=0;i<=postCount;i++){
-    const pt = t0 + (t1-t0)*(i/postCount);
-    const pp = atT(pt, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
+  for(let i=0;i<steps;i++){
+    const da = d0 + (d1-d0)*(i/steps), db = d0 + (d1-d0)*((i+1)/steps);
+    const pa = atDist(da, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
+    const pb = atDist(db, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
+    const dist = Math.hypot(pb.x-pa.x, pb.z-pa.z);
+    const rail = new THREE.Mesh(rbox(dist,0.08,0.06,0.02,1), railMat);
+    rail.position.set((pa.x+pb.x)/2, 0.75, (pa.z+pb.z)/2);
+    rail.rotation.y = alongRoadAngle(pa.dirx, pa.dirz);
+    scene.add(rail); addOutline(rail, scene, 0.04);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.75,6), railMat);
-    post.position.set(pp.x, 0.375, pp.z);
+    post.position.set(pa.x, 0.375, pa.z);
     scene.add(post);
   }
 }
 
-/* Krieger-Denkmal-Grünfläche am Nordende */
-function buildMonumentGreen(t){
-  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+7);
+/* Krieger-Denkmal-Grünfläche (Obelisk mit Stufen, Fahnen) */
+function buildMonumentGreen(index){
+  const p = atIndex(index, SHOP_SIDE, ROAD_W/2+WALK_W+7);
   const lawnTex = createGrassTexture("#78c469","#63ab55");
   const lawnMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(lawnTex, 4, 4.4), gradientMap: getGradientMap() });
   const geo = new THREE.PlaneGeometry(18, 20);
@@ -272,9 +338,49 @@ function buildMonumentGreen(t){
   });
 }
 
+/* Vielseitiger Baustein für die recherchierten Einzelgebäude (Bullinger, Wiedemann&Roßkopf,
+   Quartier Luitpold, Betten Uerheimer, VR Bank, IL Pinguino, Oskar's Bar, ...) */
+function heroBuilding(index, side, setback, opts){
+  const { w=6.5, h=4.6, d=3.8, color, trim="#f2ead8", roof, dormer=true, awning=false,
+          balcony=false, shopband=true, windowColor="#bfe3f0" } = opts;
+  const p = atIndex(index, side, setback);
+  const angle = facingRoadAngle(p.perpx, p.perpz, side);
+  const roofColor = roof || shade(color, 0.55);
+  const g = new THREE.Group();
+  addPart(g, rbox(w,h,d,0.1,2), color).position.y = h/2;
+  addPart(g, rbox(w+0.4,0.5,d+0.4,0.1,2), roofColor).position.y = h+0.25;
+  if(dormer){
+    const n = w > 8 ? 3 : 1;
+    const spread = w*0.32;
+    for(let i=0;i<n;i++){
+      const dx = n===1 ? 0 : (i/(n-1)-0.5)*2*spread;
+      addPart(g, rbox(w*0.16,0.85,0.7,0.08,1), roofColor).position.set(dx, h+0.75, d*0.28);
+    }
+  }
+  if(balcony){
+    addPart(g, rbox(w*0.32,0.13,0.55,0.04,1), "#a8a196").position.set(0, h*0.62, d/2+0.3);
+  }
+  if(awning){
+    const aw = addPart(g, rbox(w*0.85,0.28,1.3,0.08,1), "#241e2c");
+    aw.position.set(0, h*0.55, d/2+0.55); aw.rotation.x = -0.32;
+  }
+  if(shopband){
+    addPart(g, rbox(w*0.86,1.3,0.1,0.05,1), "#241e2c").position.set(0, 1.0, d/2-0.08);
+    [-w*0.24, w*0.24].forEach(dx=>{
+      addPart(g, rbox(w*0.18,1.1,0.06,0.06,1), windowColor).position.set(dx, 1.05, d/2-0.02);
+    });
+  }
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = angle;
+  scene.add(g);
+  fakeShadow(p.x,p.z, Math.max(w,d)*0.6);
+  return { x:p.x, z:p.z, angle };
+}
+
 /* "70 Luitpoldstraße": großes cremefarbenes Eckhaus, dunkles Mansarddach, Gauben, Balkon */
-function buildGrandBuilding(t){
-  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+4.6);
+function buildGrandBuilding(index, side, setback){
+  const p = atIndex(index, side, setback);
+  const angle = facingRoadAngle(p.perpx, p.perpz, side);
   const g = new THREE.Group();
   addPart(g, rbox(8.5,5.2,4.6,0.1,2), "#e9e2cf").position.y = 2.6;
   const mansard = addPart(g, rbox(9.0,1.7,5.0,0.12,2), "#5a3a35");
@@ -288,14 +394,15 @@ function buildGrandBuilding(t){
   const archDoor = addPart(g, rbox(1.3,2.2,0.1,0.3,2), "#2c2430");
   archDoor.position.set(0, 1.1, 2.32);
   g.position.set(p.x,0,p.z);
-  g.rotation.y = facingRoadAngle(SHOP_SIDE);
+  g.rotation.y = angle;
   scene.add(g);
   fakeShadow(p.x,p.z,5.2);
 }
 
 /* "75 Luitpoldstraße": weißes Haus mit Ladenfront ("Optik"), eine Gaube */
-function buildOptikBuilding(t){
-  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+4.2);
+function buildOptikBuilding(index, side, setback){
+  const p = atIndex(index, side, setback);
+  const angle = facingRoadAngle(p.perpx, p.perpz, side);
   const g = new THREE.Group();
   addPart(g, rbox(6.5,4.6,3.8,0.1,2), "#f2ead8").position.y = 2.3;
   const roof = addPart(g, rbox(6.9,1.1,4.1,0.1,2), "#6b4a3a");
@@ -307,15 +414,60 @@ function buildOptikBuilding(t){
     addPart(g, rbox(1.4,1.2,0.06,0.05,1), "#bfe3f0").position.set(dx, 1.15, 1.96);
   });
   g.position.set(p.x,0,p.z);
-  g.rotation.y = facingRoadAngle(SHOP_SIDE);
+  g.rotation.y = angle;
   scene.add(g);
   fakeShadow(p.x,p.z,4.2);
 }
 
+/* Backhaus Hackner: blaues Jugendstil-Eckhaus mit rundem Erker */
+function buildBackhausHackner(index, side, setback){
+  const p = atIndex(index, side, setback);
+  const angle = facingRoadAngle(p.perpx, p.perpz, side);
+  const g = new THREE.Group();
+  addPart(g, rbox(7,6.2,4.2,0.12,2), "#a8c4dc").position.y = 3.1;
+  addPart(g, rbox(7.4,0.5,4.6,0.1,2), "#7a3a30").position.y = 6.5;
+  [-2.3,0,2.3].forEach(dx=>{
+    addPart(g, rbox(1.3,0.9,0.8,0.08,1), "#7a3a30").position.set(dx, 7.0, 1.9);
+  });
+  const bay = addPart(g, new THREE.CylinderGeometry(1.2,1.2,3.0,8,1,false,-Math.PI/3,2*Math.PI/3), "#a8c4dc");
+  bay.position.set(0, 4.2, 2.1);
+  addPart(g, rbox(5.4,1.3,0.1,0.05,1), "#2c2430").position.set(0, 1.0, 2.02);
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = angle;
+  scene.add(g);
+  fakeShadow(p.x,p.z,4.6);
+}
+
+/* Schloss Neuburg — vereinfachter, aber richtig proportionierter Fernblick-Baukörper:
+   langgestreckter weißer Riegel, rotes Ziegeldach, zwei runde Ecktürme mit grünen Kuppeln. */
+function buildSchlossBackdrop(index, side, setback){
+  const p = atIndex(index, side, setback);
+  const angle = facingRoadAngle(p.perpx, p.perpz, side);
+  const g = new THREE.Group();
+  const W = 46, H = 15, D = 16;
+  addPart(g, rbox(W,H,D,0.15,2), "#f2ede0").position.y = H/2;
+  addPart(g, rbox(W+0.6,1.6,D+0.6,0.1,2), "#a8402c").position.y = H+0.9;
+  [-W*0.5+3.2, W*0.5-3.2].forEach(dx=>{
+    const tower = addPart(g, new THREE.CylinderGeometry(3.1,3.4,H+3,16), "#f2ede0");
+    tower.position.set(dx, (H+3)/2, D*0.15);
+    const dome = addPart(g, new THREE.ConeGeometry(3.4,3.6,16), "#5a8f6a");
+    dome.position.set(dx, H+3+1.6, D*0.15);
+    const spike = addPart(g, new THREE.CylinderGeometry(0.06,0.06,1.0,6), "#3a3244");
+    spike.position.set(dx, H+3+3.6, D*0.15);
+  });
+  for(let i=-3;i<=3;i++){
+    addPart(g, rbox(1.6,2.2,0.1,0.05,1), "#7fb6d9").position.set(i*5.4, H*0.5, D/2+0.02);
+  }
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = angle;
+  scene.add(g);
+  fakeShadow(p.x,p.z,20);
+}
+
 /* "The Oracle": Lachs-Fassade, dunkle Ladenfront, Markise, Bordeaux-Stühle + Holztische */
-function buildOracleBuilding(t){
-  const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+3.8);
-  const faceAngle = facingRoadAngle(SHOP_SIDE);
+function buildOracleBuilding(index, side, setback){
+  const p = atIndex(index, side, setback);
+  const faceAngle = facingRoadAngle(p.perpx, p.perpz, side);
   const g = new THREE.Group();
   addPart(g, rbox(7.4,4.4,4.0,0.12,2), "#E8896B").position.y = 2.2;
   addPart(g, rbox(7.7,0.4,4.3,0.08,2), "#f2ead8").position.y = 4.5;
@@ -369,9 +521,9 @@ function buildOracleBuilding(t){
 
 /* Generisches Reihenhaus zum Lückenfüllen — damit die Straße durchgehend bebaut wirkt,
    statt einzelne Häuser auf freiem Feld. Variiert Farbe/Dachform leicht pro Aufruf. */
-function fillerRowHouse(t, side, color, tall){
+function fillerRowHouse(dist, side, color, tall){
   const setback = ROAD_W/2 + WALK_W + (tall ? 3.6 : 3.0);
-  const p = atT(t, side, setback);
+  const p = atDist(dist, side, setback);
   const g = new THREE.Group();
   const h = tall ? 4.6 : 3.6;
   addPart(g, rbox(5.4, h, 3.4, 0.1, 2), color).position.y = h/2;
@@ -383,7 +535,7 @@ function fillerRowHouse(t, side, color, tall){
     addPart(g, rbox(1.1,1.1,0.06,0.06,1), "#a8d8e8").position.set(dx, h*0.62, 1.76);
   });
   g.position.set(p.x,0,p.z);
-  g.rotation.y = facingRoadAngle(side);
+  g.rotation.y = facingRoadAngle(p.perpx, p.perpz, side);
   scene.add(g);
   fakeShadow(p.x,p.z,3.4);
 }
@@ -394,39 +546,95 @@ function shade(hex, amt){
   return c;
 }
 
+const distAtIndex = (i) => i===0 ? 0 : SEG[i-1].to;
+
 function buildLuitpoldstrasse(){
   buildBaseGround();
   buildStreetSurface();
 
-  buildMonumentGreen(2);
-  buildGrandBuilding(12);
-  buildOptikBuilding(24);
-  const oraclePos = buildOracleBuilding(34);
+  const heroDistances = [];
+  const markHero = (i) => heroDistances.push(distAtIndex(i));
 
-  crosswalk(40);
+  /* --- Süden: Bullinger-Kreuzung --- */
+  heroBuilding(0, SHOP_SIDE, ROAD_W/2+WALK_W+3.4, { w:7.5, h:5.4, d:4.2, color:"#c9b79a", trim:"#8a7a5c", dormer:false, shopband:true, windowColor:"#dfe4e2" });
+  markHero(0);
+  heroBuilding(0, WALL_SIDE, ROAD_W/2+WALK_W+3.2, { w:7.8, h:6.0, d:4.4, color:"#e9e5da", trim:"#c9c2b0", dormer:false, shopband:true });
+  markHero(0);
+  heroBuilding(1, SHOP_SIDE, ROAD_W/2+WALK_W+3.0, { w:5.6, h:4.4, d:3.4, color:"#8fa682", trim:"#f2ead8", shopband:true }); // Wiedemann & Roßkopf
+  markHero(1);
 
-  /* Lücken auf der Ladenseite (Denkmal bis Straßenende) mit eng anliegenden
-     Reihenhäusern schließen — EINE durchgehende Zeile, wie auf dem Referenzfoto. */
+  /* --- Aufgang zur Ladenzeile mit Treppe (zwischen 0 und 2) --- */
+  const stairsBase = atDist((distAtIndex(1)+distAtIndex(2))/2, SHOP_SIDE, ROAD_W/2+WALK_W+0.2);
+  const stairs = new THREE.Mesh(rbox(3.2,1.1,2.6,0.1,2), toonMaterial("#c9c2b6"));
+  stairs.position.set(stairsBase.x, 0.55, stairsBase.z);
+  scene.add(stairs); addOutline(stairs, scene, 0.05);
+  railingSegment(distAtIndex(1)+2, distAtIndex(2)-2);
+
+  /* --- "80" The Oracle / Bäckerei mit roten Bänken --- */
+  const oraclePos = buildOracleBuilding(2, SHOP_SIDE, ROAD_W/2+WALK_W+3.8);
+  markHero(2);
+  /* --- "75" Optik --- */
+  buildOptikBuilding(6, SHOP_SIDE, ROAD_W/2+WALK_W+4.2);
+  markHero(6);
+  /* --- "74" Rosenstraße-Ecke, Betten Uerheimer --- */
+  heroBuilding(7, SHOP_SIDE, ROAD_W/2+WALK_W+4.0, { w:8.2, h:5.0, d:4.4, color:"#e0c368", trim:"#8a6a3a", dormer:true, shopband:true });
+  markHero(7);
+  crosswalk(7);
+  /* --- "70" VR Bank + Herrnbräu-Café / großes Eckhaus --- */
+  buildGrandBuilding(9, SHOP_SIDE, ROAD_W/2+WALK_W+4.6);
+  markHero(9);
+  heroBuilding(9, SHOP_SIDE, ROAD_W/2+WALK_W+9.5, { w:5.5, h:4.0, d:3.4, color:"#f2ead8", trim:"#8a2a2a", roof:"#8a2a2a", awning:true, dormer:false });
+  markHero(9);
+  buildMonumentGreen(9);
+  /* --- "66" Backhaus Hackner (blaues Jugendstilhaus) --- */
+  buildBackhausHackner(10, SHOP_SIDE, ROAD_W/2+WALK_W+4.2);
+  markHero(10);
+  /* --- IL Pinguino Eiscafé --- */
+  heroBuilding(13, SHOP_SIDE, ROAD_W/2+WALK_W+3.6, { w:5.0, h:5.2, d:3.4, color:"#e9e5da", trim:"#c9c2b0", awning:true, dormer:false });
+  markHero(13);
+  /* --- Schloss: großer Fernblick-Baukörper auf der gegenüberliegenden Seite --- */
+  buildSchlossBackdrop(11, WALL_SIDE, ROAD_W/2+WALK_W+20);
+  /* --- Oskar's Bar, Übergang zur Flusspromenade --- */
+  heroBuilding(16, SHOP_SIDE, ROAD_W/2+WALK_W+3.4, { w:6.5, h:6.5, d:4.0, color:"#e9dfc0", trim:"#c9bfa0", dormer:true, shopband:true });
+  markHero(16);
+
+  /* --- Lücken auf der Ladenseite mit eng anliegenden Reihenhäusern schließen --- */
   const shopPalette = ["#D9A441","#C9A98B","#E8C77E","#B5562F","#dcd0b8"];
   let colorIdx = 0;
-  for(let t = 17; t <= STREET_LEN-2; t += 5.6){
-    if(Math.abs(t-24) < 4.5 || Math.abs(t-34) < 4.5) continue;
-    fillerRowHouse(t, SHOP_SIDE, shopPalette[colorIdx % shopPalette.length], colorIdx % 2 === 0);
+  for(let d = 8; d <= PATH_LEN-8; d += 6.0){
+    if(heroDistances.some(hd => Math.abs(hd-d) < 5)) continue;
+    fillerRowHouse(d, SHOP_SIDE, shopPalette[colorIdx % shopPalette.length], colorIdx % 2 === 0);
     colorIdx++;
   }
 
-  /* Gegenüberliegende Seite bleibt OFFEN (Sidewalk + Geländer), wie in echt —
-     nur nahe am Denkmal etwas Efeu-Mauer, sonst keine Bebauung. */
-  [2, 8].forEach(t => ivyWallSegment(t));
-  railingSegment(11, STREET_LEN-3);
+  /* --- Efeu-Mauer entlang der recherchierten Rot-Laub-Strecke (77-75) --- */
+  const wallFrom = distAtIndex(4), wallTo = distAtIndex(6);
+  for(let d = wallFrom; d <= wallTo; d += 6.5) ivyWallSegment(d);
 
-  [6, 18, 30, 44, 58].forEach(t => streetLamp(t, SHOP_SIDE));
+  /* --- Donauufer-Promenade: Geländer + Bänke am Nordende --- */
+  railingSegment(distAtIndex(17), PATH_LEN-2);
+  [18,19,20,21].forEach(i=>{
+    const p = atIndex(i, WALL_SIDE, ROAD_W/2+WALK_W+1.4);
+    const bench = new THREE.Mesh(rbox(1.4,0.5,0.55,0.08,1), toonMaterial("#6b4a3a"));
+    bench.position.set(p.x,0.28,p.z);
+    bench.rotation.y = facingRoadAngle(p.perpx,p.perpz,WALL_SIDE);
+    scene.add(bench); addOutline(bench, scene, 0.05);
+    fakeShadow(p.x,p.z,1.0);
+  });
 
-  const carColors = ["#3d4a5c","#8a1f2b"];
-  [22, 42].forEach((t,i) => parkedCar(t, WALL_SIDE, carColors[i % carColors.length]));
+  /* --- Laternen + parkende Autos entlang der ganzen Strecke --- */
+  for(let d = 10; d <= PATH_LEN-10; d += 16) streetLamp(d, SHOP_SIDE);
+  const carColors = ["#3d4a5c","#8a1f2b","#c7c2c9","#2a2f38"];
+  let carIdx = 0;
+  for(let d = 14; d <= PATH_LEN-14; d += 11){
+    if(d > wallFrom-6 && d < wallTo+6) continue; // nicht direkt vor der Mauer parken
+    parkedCar(d, WALL_SIDE, carColors[carIdx % carColors.length]);
+    carIdx++;
+  }
 
-  [12, 28, 48].forEach(t => {
-    const p = atT(t, WALL_SIDE, ROAD_W/2+WALK_W+2.2);
+  /* --- vereinzelte Bäume auf der offenen Seite --- */
+  for(let d = 20; d <= PATH_LEN-20; d += 22){
+    const p = atDist(d, WALL_SIDE, ROAD_W/2+WALK_W+2.4);
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,1.7,7), toonMaterial("#8a5a3a"));
     trunk.position.set(p.x,0.85,p.z);
     scene.add(trunk);
@@ -434,7 +642,7 @@ function buildLuitpoldstrasse(){
     leaves.position.set(p.x,2.2,p.z);
     scene.add(leaves); addOutline(leaves, scene, 0.06);
     fakeShadow(p.x,p.z,1.1);
-  });
+  }
 
   return oraclePos;
 }
@@ -443,12 +651,14 @@ export function buildWorld(){
   buildLuitpoldstrasse();
 }
 
-export const STREET_SPAWN = atT(29, WALL_SIDE, ROAD_W/2 + WALK_W/2);
-export { STREET_A, STREET_B };
+export const STREET_SPAWN = atDist(distAtIndex(2)+3, WALL_SIDE, ROAD_W/2 + WALK_W/2);
 
-export const BOUNDS = {
-  minX: Math.min(STREET_A.x, STREET_B.x) - 30,
-  maxX: Math.max(STREET_A.x, STREET_B.x) + 30,
-  minZ: STREET_A.z - 12,
-  maxZ: STREET_B.z + 12
-};
+export const BOUNDS = (() => {
+  const xs = LUITPOLD_PATH.map(p=>p.x), zs = LUITPOLD_PATH.map(p=>p.z);
+  return {
+    minX: Math.min(...xs) - 25,
+    maxX: Math.max(...xs) + 25,
+    minZ: Math.min(...zs) - 15,
+    maxZ: Math.max(...zs) + 15
+  };
+})();
