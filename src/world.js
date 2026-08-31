@@ -132,14 +132,18 @@ function buildStreetSurface(){
     t += dash+gap;
   }
 
-  /* Gras beidseitig hinter den Gehwegen, damit nichts "in der Luft" endet */
+}
+
+/* Große Grasfläche unter allem — Gebäude stehen direkt dahinter, kein Feld-Look */
+function buildBaseGround(){
   const grassTex = createGrassTexture();
-  const grassMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(grassTex, 30, 30), gradientMap: getGradientMap() });
-  const gOff = ROAD_W/2 + WALK_W + 20;
-  [1,-1].forEach(side=>{
-    const ga = atT(-10, side, gOff), gb = atT(STREET_LEN+10, side, gOff);
-    flatSegment(ga.x,ga.z,gb.x,gb.z, 40, grassMat, -0.02);
-  });
+  const grassMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(grassTex, 24, 26), gradientMap: getGradientMap() });
+  const mid = atT(STREET_LEN/2);
+  const geo = new THREE.PlaneGeometry(120, 140);
+  geo.rotateX(-Math.PI/2);
+  const ground = new THREE.Mesh(geo, grassMat);
+  ground.position.set(mid.x, -0.03, mid.z);
+  scene.add(ground);
 }
 
 /* Zebrastreifen: Balken quer über die volle Fahrbahnbreite, mit Lücken in Straßenrichtung */
@@ -336,7 +340,35 @@ function buildOracleBuilding(t){
   return p;
 }
 
+/* Generisches Reihenhaus zum Lückenfüllen — damit die Straße durchgehend bebaut wirkt,
+   statt einzelne Häuser auf freiem Feld. Variiert Farbe/Dachform leicht pro Aufruf. */
+function fillerRowHouse(t, side, color, tall){
+  const setback = ROAD_W/2 + WALK_W + (tall ? 3.6 : 3.0);
+  const p = atT(t, side, setback);
+  const g = new THREE.Group();
+  const h = tall ? 4.6 : 3.6;
+  addPart(g, rbox(5.4, h, 3.4, 0.1, 2), color).position.y = h/2;
+  const roofColor = shade(color, 0.6);
+  addPart(g, rbox(5.7, 0.5, 3.7, 0.08, 2), roofColor).position.y = h+0.25;
+  const shopband = addPart(g, rbox(4.8,1.3,0.1,0.05,1), "#241e2c");
+  shopband.position.set(0, 1.0, 1.72);
+  [-1.6,1.6].forEach(dx=>{
+    addPart(g, rbox(1.1,1.1,0.06,0.06,1), "#a8d8e8").position.set(dx, h*0.62, 1.76);
+  });
+  g.position.set(p.x,0,p.z);
+  g.rotation.y = facingRoadAngle(side);
+  scene.add(g);
+  fakeShadow(p.x,p.z,3.4);
+}
+
+function shade(hex, amt){
+  const c = new THREE.Color(hex);
+  c.multiplyScalar(amt);
+  return c;
+}
+
 function buildLuitpoldstrasse(){
+  buildBaseGround();
   buildStreetSurface();
 
   buildMonumentGreen(2);
@@ -346,11 +378,26 @@ function buildLuitpoldstrasse(){
 
   crosswalk(40);
 
-  [6, 18, 30, 44].forEach(t => streetLamp(t, SHOP_SIDE));
-  [4, 16, 28, 46, 52].forEach(t => ivyWallSegment(t));
+  /* Lücken auf der Ladenseite (Denkmal bis Straßenende) mit Reihenhäusern schließen */
+  const shopPalette = ["#D9A441","#C9A98B","#E8C77E","#B5562F","#dcd0b8"];
+  let colorIdx = 0;
+  for(let t = 18; t <= STREET_LEN-2; t += 6){
+    if(Math.abs(t-24) < 5 || Math.abs(t-34) < 5) continue;
+    fillerRowHouse(t, SHOP_SIDE, shopPalette[colorIdx % shopPalette.length], colorIdx % 2 === 0);
+    colorIdx++;
+  }
+
+  /* Gegenüberliegende Seite: Efeu-Mauer nahe am Denkmal, danach durchgehende Häuserzeile */
+  [2, 8].forEach(t => ivyWallSegment(t));
+  for(let t = 14; t <= STREET_LEN-2; t += 6){
+    fillerRowHouse(t, WALL_SIDE, shopPalette[(colorIdx+2) % shopPalette.length], colorIdx % 2 === 1);
+    colorIdx++;
+  }
+
+  [6, 18, 30, 44, 58].forEach(t => streetLamp(t, SHOP_SIDE));
 
   const carColors = ["#3d4a5c","#8a1f2b","#c7c2c9","#2a2f38"];
-  [8, 20, 46, 52].forEach((t,i) => parkedCar(t, WALL_SIDE, carColors[i % carColors.length]));
+  [11, 20, 46, 58].forEach((t,i) => parkedCar(t, WALL_SIDE, carColors[i % carColors.length]));
 
   return oraclePos;
 }
