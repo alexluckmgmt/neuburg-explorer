@@ -79,7 +79,7 @@ const DIRX = SDX/STREET_LEN, DIRZ = SDZ/STREET_LEN;
 const PERPX = -DIRZ, PERPZ = DIRX;
 const FACE_ANGLE = Math.atan2(-DIRZ, DIRX); // rotation.y, damit lokale +X-Achse in Straßenrichtung zeigt
 
-const ROAD_W = 6.4, WALK_W = 2.3;
+const ROAD_W = 10.5, WALK_W = 2.6;
 const SHOP_SIDE = 1;   // Ladenzeile liegt auf der +PERP Seite
 const WALL_SIDE = -1;  // Bruchstein-/Efeu-Mauer auf der gegenüberliegenden Seite
 
@@ -217,6 +217,27 @@ function ivyWallSegment(t){
   scene.add(ivy); addOutline(ivy, scene, 0.06);
 }
 
+/* Schlichtes Geländer am Gehwegrand — die offene Straßenseite ohne Häuserzeile,
+   genau wie auf dem Referenzfoto (Läden nur auf EINER Seite). */
+function railingSegment(t0, t1){
+  const p0 = atT(t0, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
+  const p1 = atT(t1, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
+  const dist = Math.hypot(p1.x-p0.x, p1.z-p0.z);
+  const railMat = toonMaterial("#2c2a33");
+  const rail = new THREE.Mesh(rbox(dist,0.08,0.06,0.02,1), railMat);
+  rail.position.set((p0.x+p1.x)/2, 0.75, (p0.z+p1.z)/2);
+  rail.rotation.y = FACE_ANGLE;
+  scene.add(rail); addOutline(rail, scene, 0.04);
+  const postCount = Math.max(2, Math.round(dist/1.4));
+  for(let i=0;i<=postCount;i++){
+    const pt = t0 + (t1-t0)*(i/postCount);
+    const pp = atT(pt, WALL_SIDE, ROAD_W/2+WALK_W+0.15);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.75,6), railMat);
+    post.position.set(pp.x, 0.375, pp.z);
+    scene.add(post);
+  }
+}
+
 /* Krieger-Denkmal-Grünfläche am Nordende */
 function buildMonumentGreen(t){
   const p = atT(t, SHOP_SIDE, ROAD_W/2+WALK_W+7);
@@ -325,6 +346,12 @@ function buildOracleBuilding(t){
     const leg = new THREE.Mesh(tableLeg, toonMaterial("#3a3244"));
     leg.position.set(tx,0.36,tz);
     scene.add(leg);
+    const umbrellaPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,1.7,8), toonMaterial("#3a3244"));
+    umbrellaPole.position.set(tx,1.5,tz);
+    scene.add(umbrellaPole);
+    const umbrella = new THREE.Mesh(new THREE.ConeGeometry(1.15,0.55,10), toonMaterial("#8B2E3C"));
+    umbrella.position.set(tx,2.35,tz);
+    scene.add(umbrella); addOutline(umbrella, scene, 0.05);
     [[-0.55,0],[0.55,0],[0,0.55],[0,-0.55]].forEach(([cx,cz])=>{
       const seat = new THREE.Mesh(chairSeat, toonMaterial("#8B2E3C"));
       seat.position.set(tx+cx,0.42,tz+cz);
@@ -378,26 +405,36 @@ function buildLuitpoldstrasse(){
 
   crosswalk(40);
 
-  /* Lücken auf der Ladenseite (Denkmal bis Straßenende) mit Reihenhäusern schließen */
+  /* Lücken auf der Ladenseite (Denkmal bis Straßenende) mit eng anliegenden
+     Reihenhäusern schließen — EINE durchgehende Zeile, wie auf dem Referenzfoto. */
   const shopPalette = ["#D9A441","#C9A98B","#E8C77E","#B5562F","#dcd0b8"];
   let colorIdx = 0;
-  for(let t = 18; t <= STREET_LEN-2; t += 6){
-    if(Math.abs(t-24) < 5 || Math.abs(t-34) < 5) continue;
+  for(let t = 17; t <= STREET_LEN-2; t += 5.6){
+    if(Math.abs(t-24) < 4.5 || Math.abs(t-34) < 4.5) continue;
     fillerRowHouse(t, SHOP_SIDE, shopPalette[colorIdx % shopPalette.length], colorIdx % 2 === 0);
     colorIdx++;
   }
 
-  /* Gegenüberliegende Seite: Efeu-Mauer nahe am Denkmal, danach durchgehende Häuserzeile */
+  /* Gegenüberliegende Seite bleibt OFFEN (Sidewalk + Geländer), wie in echt —
+     nur nahe am Denkmal etwas Efeu-Mauer, sonst keine Bebauung. */
   [2, 8].forEach(t => ivyWallSegment(t));
-  for(let t = 14; t <= STREET_LEN-2; t += 6){
-    fillerRowHouse(t, WALL_SIDE, shopPalette[(colorIdx+2) % shopPalette.length], colorIdx % 2 === 1);
-    colorIdx++;
-  }
+  railingSegment(11, STREET_LEN-3);
 
   [6, 18, 30, 44, 58].forEach(t => streetLamp(t, SHOP_SIDE));
 
-  const carColors = ["#3d4a5c","#8a1f2b","#c7c2c9","#2a2f38"];
-  [11, 20, 46, 58].forEach((t,i) => parkedCar(t, WALL_SIDE, carColors[i % carColors.length]));
+  const carColors = ["#3d4a5c","#8a1f2b"];
+  [22, 42].forEach((t,i) => parkedCar(t, WALL_SIDE, carColors[i % carColors.length]));
+
+  [12, 28, 48].forEach(t => {
+    const p = atT(t, WALL_SIDE, ROAD_W/2+WALK_W+2.2);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,1.7,7), toonMaterial("#8a5a3a"));
+    trunk.position.set(p.x,0.85,p.z);
+    scene.add(trunk);
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.2,10,8), toonMaterial("#4f9a4a"));
+    leaves.position.set(p.x,2.2,p.z);
+    scene.add(leaves); addOutline(leaves, scene, 0.06);
+    fakeShadow(p.x,p.z,1.1);
+  });
 
   return oraclePos;
 }
@@ -406,7 +443,7 @@ export function buildWorld(){
   buildLuitpoldstrasse();
 }
 
-export const STREET_SPAWN = atT(29, WALL_SIDE, 1.6);
+export const STREET_SPAWN = atT(29, WALL_SIDE, ROAD_W/2 + WALK_W/2);
 export { STREET_A, STREET_B };
 
 export const BOUNDS = {
