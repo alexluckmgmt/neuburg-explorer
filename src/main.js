@@ -4,7 +4,7 @@ import { CONFIG } from "./config.js";
 import { state, loadState, saveState, totalRate } from "./state.js";
 import { scene, camera, renderer, buildWorld, BOUNDS } from "./world.js";
 import { player, playerShadow } from "./player.js";
-import { moveDir, keyboardVector } from "./controls.js";
+import { moveDir, keyboardVector, camYaw } from "./controls.js";
 import { checkProximity, updateLabels, updateHUD, applyOfflineProgress } from "./ui.js";
 import { updateMinimapPlayer } from "./minimap.js";
 
@@ -13,7 +13,7 @@ buildWorld();
 /* ============================================================
    GAME LOOP
    ============================================================ */
-const camOffset = new THREE.Vector3(0, 9.5, 12.5);
+const CAM_HEIGHT = 9.5, CAM_DIST = 12.5;
 const camTarget = new THREE.Vector3();
 let lastTime = performance.now();
 
@@ -37,8 +37,9 @@ function animate(now){
   }
   playerShadow.position.set(player.position.x, 0.015, player.position.z);
 
-  camTarget.set(player.position.x + camOffset.x, camOffset.y, player.position.z + camOffset.z);
-  camera.position.lerp(camTarget, Math.min(1, dt*4));
+  const cx = Math.sin(camYaw.value)*CAM_DIST, cz = Math.cos(camYaw.value)*CAM_DIST;
+  camTarget.set(player.position.x + cx, CAM_HEIGHT, player.position.z + cz);
+  camera.position.lerp(camTarget, Math.min(1, dt*6));
   camera.lookAt(player.position.x, 1, player.position.z);
 
   checkProximity();

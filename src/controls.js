@@ -36,6 +36,37 @@ window.addEventListener("pointermove", joyMove);
 window.addEventListener("pointerup", joyEnd);
 window.addEventListener("pointercancel", joyEnd);
 
+/* ============================================================
+   KAMERA-ORBIT — mit dem Finger/der Maus auf die 3D-Ansicht ziehen,
+   um die Kamera um den Spieler zu drehen (behebt "sehe nur die
+   Rückseite" — die Kamera hing vorher an einer festen Weltrichtung).
+   ============================================================ */
+export const camYaw = { value: 0 };
+const canvasWrap = document.getElementById("canvasWrap");
+let camDragActive = false, camDragId = null, camDragLastX = 0;
+
+function camDragStart(e){
+  if(e.target !== canvasWrap && e.target.tagName !== "CANVAS") return;
+  camDragActive = true;
+  camDragId = e.pointerId;
+  camDragLastX = e.clientX;
+  canvasWrap.setPointerCapture(camDragId);
+}
+function camDragMove(e){
+  if(!camDragActive || e.pointerId !== camDragId) return;
+  const dx = e.clientX - camDragLastX;
+  camDragLastX = e.clientX;
+  camYaw.value -= dx * 0.008;
+}
+function camDragEnd(e){
+  if(e.pointerId !== camDragId) return;
+  camDragActive = false;
+}
+canvasWrap.addEventListener("pointerdown", camDragStart);
+window.addEventListener("pointermove", camDragMove);
+window.addEventListener("pointerup", camDragEnd);
+window.addEventListener("pointercancel", camDragEnd);
+
 const keys = {};
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()]=true);
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()]=false);
