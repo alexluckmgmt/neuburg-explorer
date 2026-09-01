@@ -247,10 +247,17 @@ function buildStreetSurface(){
      statt fast bündig — folgt dabei dem echten Höhenprofil der Straße. */
   const CURB_HEIGHT = 0.15;
   const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, PATH_LEN/2.5, WALK_W/2.5), gradientMap: getGradientMap(), side: THREE.DoubleSide });
+  const curbMat = "#726c60";
   const offset = ROAD_W/2 + WALK_W/2;
   [1,-1].forEach(side=>{
     const offsetSamples = samples.map(s => ({ ...s, x: s.x + s.perpx*side*offset, z: s.z + s.perpz*side*offset }));
     buildRibbon(offsetSamples, WALK_W, walkMat, CURB_HEIGHT);
+
+    /* Senkrechte Bordstein-Kante zwischen Fahrbahn (y=0) und Gehweg
+       (y=CURB_HEIGHT) — vorher fehlte die komplett, dadurch sah der
+       Gehweg wie eine unsichtbare Stufe aus statt wie ein echter Bordstein. */
+    const edgeSamples = samples.map(s => [s.x + s.perpx*side*(ROAD_W/2), s.y, s.z + s.perpz*side*(ROAD_W/2)]);
+    buildWallStrip(edgeSamples, CURB_HEIGHT, curbMat, 1);
   });
 
   /* gestrichelte Mittellinie — folgt dem Höhenprofil */
@@ -849,22 +856,9 @@ function buildPlanOverlay(){
     }
   });
 
-  BUILDING_FOOTPRINTS.forEach(b => {
-    /* Vorher fast unsichtbar (helle Farbe, 10-28% Deckkraft auf beigem
-       Boden) — jetzt kräftige Füllung + fetter dunkler Rand, damit die
-       Grundrisse wie echte Stadtblöcke aussehen, nicht wie ein Geist. */
-    const fill = b.confirmed ? "#2fa89e" : "#c98a5e";
-    const edge = b.confirmed ? "#0b3532" : "#4a3020";
-    const pts3 = b.pts.map(([x,z]) => [x, elevationAt(x,z), z]);
-    buildFlatArea(pts3, fill, 0.02, 0.8);
-    const ring = pts3.concat([pts3[0]]);
-    buildFlatRibbon(ring, 0.5, edge, 0.025, 1);
-    if(b.housenumber){
-      const cx = b.pts.reduce((s,p)=>s+p[0],0)/b.pts.length;
-      const cz = b.pts.reduce((s,p)=>s+p[1],0)/b.pts.length;
-      groundLabel(b.housenumber, cx, elevationAt(cx,cz), cz, 1.6, b.confirmed ? "#0b2847" : "#3a4a5c");
-    }
-  });
+  /* Häuser bewusst NOCH NICHT gezeichnet — erst wenn der Boden (Straße,
+     Bordstein, Gehweg) für sich richtig aussieht. Querstraßen/Mauern/
+     Rasen oben bleiben aber drin, die waren nicht das Problem. */
 }
 
 /* Kleine Distanzmarker alle 50m entlang der Straße — nur zur Kontrolle,
@@ -884,10 +878,9 @@ function buildLuitpoldstrasse(){
   buildStreetSurface();
   buildDistanceMarkers();
 
-  /* --- Absichtlich NUR Straße + Gehweg + Meter-Marker. Gebäude, Querstraßen,
-     Mauern, Rasen etc. (buildPlanOverlay) sind erstmal komplett raus, bis
-     dieser reine Boden — Fahrbahn + Bordstein + Gehweg — wirklich passt. --- */
-  // buildPlanOverlay();
+  /* Querstraßen/Mauern/Rasen bleiben drin (waren nicht das Problem) —
+     nur Häuser fehlen noch, siehe buildPlanOverlay(). */
+  buildPlanOverlay();
 
   return atDist(0,0,0);
 }
