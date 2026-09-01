@@ -596,10 +596,13 @@ function buildOracleBuilding(index, side, setback){
   });
 
   /* durchgehende schwarze Markise/Blende über der GESAMTEN Ladenzeile, unter den
-     Oberfenstern — kragt vor die Fassade vor, wie im Foto. */
-  addPart(g, rbox(W-0.15, 0.18, 0.5, 0.03, 1), "#1c1720").position.set(0, 2.08, D/2+0.15);
+     Oberfenstern — kragt vor die Fassade vor, wie im Foto. Niedriger und weiter
+     vorne als vorher, damit das Schild AUF der Blende sitzt statt dahinter versteckt. */
+  const canopyY = 1.92, canopyH = 0.42, canopyDepth = 0.42;
+  const canopyFrontZ = D/2 + canopyDepth - 0.08;
+  addPart(g, rbox(W-0.15, canopyH, canopyDepth, 0.03, 1), "#1c1720").position.set(0, canopyY, D/2+canopyDepth/2-0.08);
 
-  /* goldenes Fries-Schild "ORACLE Kebap & Pizza" über dem gesamten Oracle-Abschnitt */
+  /* goldenes Schild "ORACLE Kebap & Pizza" direkt auf der Blende, über dem Oracle-Abschnitt */
   const oracleMid = (oracleSpan.min+oracleSpan.max)/2, oracleW = oracleSpan.max-oracleSpan.min;
   const signCanvas = document.createElement("canvas");
   signCanvas.width = 1024; signCanvas.height = 160;
@@ -609,8 +612,8 @@ function buildOracleBuilding(index, side, setback){
   sctx.font = "italic bold 62px 'Space Grotesk', sans-serif"; sctx.fillText("ORACLE", 512, 58);
   sctx.font = "34px 'Space Grotesk', sans-serif"; sctx.fillText("Kebap & Pizza", 512, 114);
   const signTex = new THREE.CanvasTexture(signCanvas);
-  const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(oracleW*0.95,0.55), new THREE.MeshBasicMaterial({ map: signTex, transparent:true }));
-  signMesh.position.set(oracleMid, 2.05, D/2+0.06);
+  const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(oracleW*0.9,canopyH*0.85), new THREE.MeshBasicMaterial({ map: signTex, transparent:true }));
+  signMesh.position.set(oracleMid, canopyY, canopyFrontZ+0.01);
   g.add(signMesh);
 
   g.position.set(p.x,0,p.z);
