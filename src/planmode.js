@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { scene, camera, renderer, canvasWrap, buildWorld, LUITPOLD_PATH, BOUNDS } from "./world.js";
+import { scene, camera, renderer, canvasWrap, buildWorld, BOUNDS } from "./world.js";
 
 buildWorld();
 
@@ -10,71 +10,53 @@ camera.far = 1200;
 camera.updateProjectionMatrix();
 
 /* ============================================================
-   FREECAM — reine Grundriss-Kontrollansicht für den PC. Kein
-   Spieler, kein HUD, keine Spiellogik. Nur zum schnellen
-   Durchschauen/Abgleichen mit dem Satellitenbild, bevor Häuser
-   gebaut werden.
+   FREECAM — echtes Herumfliegen (wie in einem 3D-Editor), NICHT
+   die Karte verschieben. Ziehen dreht nur die Blickrichtung, WASD
+   bewegt die Kamera selbst entlang dieser Blickrichtung.
    ============================================================ */
 const midX = (BOUNDS.minX + BOUNDS.maxX) / 2;
 const midZ = (BOUNDS.minZ + BOUNDS.maxZ) / 2;
-const pivot = new THREE.Vector3(midX, 0, midZ);
-let yaw = 0.4;
-let pitch = 1.15; // ziemlich top-down, aber noch mit erkennbarer Tiefe
-let dist = Math.max(BOUNDS.maxX - BOUNDS.minX, BOUNDS.maxZ - BOUNDS.minZ) * 0.62;
+const span = Math.max(BOUNDS.maxX - BOUNDS.minX, BOUNDS.maxZ - BOUNDS.minZ);
 
-const MIN_PITCH = 0.15, MAX_PITCH = 1.5;
-const MIN_DIST = 8, MAX_DIST = 700;
+camera.rotation.order = "YXZ";
+camera.position.set(midX, span*0.55, midZ + span*0.35);
+let yaw = 0, pitch = -0.9;
 
-function updateCamera(){
-  const cy = Math.cos(pitch), sy = Math.sin(pitch);
-  const cx = Math.sin(yaw) * cy, cz = Math.cos(yaw) * cy;
-  camera.position.set(
-    pivot.x + cx * dist,
-    sy * dist,
-    pivot.z + cz * dist
-  );
-  camera.lookAt(pivot);
+function applyLook(){
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
 }
-updateCamera();
+applyLook();
 
-let dragMode = null; // "orbit" | "pan"
-let lastX = 0, lastY = 0;
-
+let dragging = false, lastX = 0, lastY = 0;
 function onPointerDown(e){
-  dragMode = (e.button === 2 || e.shiftKey) ? "pan" : "orbit";
+  dragging = true;
   lastX = e.clientX; lastY = e.clientY;
   canvasWrap.setPointerCapture(e.pointerId);
 }
 function onPointerMove(e){
-  if(!dragMode) return;
+  if(!dragging) return;
   const dx = e.clientX - lastX, dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
-  if(dragMode === "orbit"){
-    yaw -= dx * 0.006;
-    pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch + dy * 0.005));
-  } else {
-    const panScale = dist * 0.0016;
-    const fwdX = Math.sin(yaw), fwdZ = Math.cos(yaw);
-    const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
-    pivot.x += (-dx*rightX + dy*fwdX) * panScale;
-    pivot.z += (-dx*rightZ + dy*fwdZ) * panScale;
-  }
-  updateCamera();
+  yaw -= dx * 0.0045;
+  pitch = Math.max(-1.55, Math.min(1.55, pitch - dy * 0.0045));
+  applyLook();
 }
 function onPointerUp(e){
-  dragMode = null;
+  dragging = false;
   try{ canvasWrap.releasePointerCapture(e.pointerId); }catch(err){}
-}
-function onWheel(e){
-  e.preventDefault();
-  dist = Math.max(MIN_DIST, Math.min(MAX_DIST, dist * Math.pow(1.0015, e.deltaY)));
-  updateCamera();
 }
 canvasWrap.addEventListener("pointerdown", onPointerDown);
 window.addEventListener("pointermove", onPointerMove);
 window.addEventListener("pointerup", onPointerUp);
-canvasWrap.addEventListener("wheel", onWheel, { passive:false });
 canvasWrap.addEventListener("contextmenu", e => e.preventDefault());
+
+let moveSpeed = Math.max(20, span*0.12);
+function onWheel(e){
+  e.preventDefault();
+  moveSpeed = Math.max(2, Math.min(span*1.5, moveSpeed * Math.pow(1.0012, -e.deltaY)));
+}
+canvasWrap.addEventListener("wheel", onWheel, { passive:false });
 
 const keys = {};
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
@@ -86,26 +68,27 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+const worldUp = new THREE.Vector3(0,1,0);
+
 let lastTime = performance.now();
 function animate(now){
   requestAnimationFrame(animate);
   const dt = Math.min((now-lastTime)/1000, 0.1);
   lastTime = now;
 
-  const panSpeed = dist * 0.9;
-  const fwdX = Math.sin(yaw), fwdZ = Math.cos(yaw);
-  const rightX = Math.cos(yaw), rightZ = -Math.sin(yaw);
-  let mx = 0, mz = 0;
-  if(keys["w"] || keys["arrowup"]) { mx += fwdX; mz += fwdZ; }
-  if(keys["s"] || keys["arrowdown"]) { mx -= fwdX; mz -= fwdZ; }
-  if(keys["a"] || keys["arrowleft"]) { mx -= rightX; mz -= rightZ; }
-  if(keys["d"] || keys["arrowright"]) { mx += rightX; mz += rightZ; }
-  if(mx || mz){
-    const len = Math.hypot(mx,mz) || 1;
-    pivot.x += (mx/len) * panSpeed * dt;
-    pivot.z += (mz/len) * panSpeed * dt;
-    updateCamera();
-  }
+  camera.getWorldDirection(forward);
+  right.crossVectors(forward, worldUp).normalize();
+
+  const boost = (keys["shift"] ? 3 : 1);
+  const speed = moveSpeed * boost * dt;
+  if(keys["w"] || keys["arrowup"])    camera.position.addScaledVector(forward, speed);
+  if(keys["s"] || keys["arrowdown"])  camera.position.addScaledVector(forward, -speed);
+  if(keys["d"] || keys["arrowright"]) camera.position.addScaledVector(right, speed);
+  if(keys["a"] || keys["arrowleft"])  camera.position.addScaledVector(right, -speed);
+  if(keys[" "] || keys["e"])          camera.position.addScaledVector(worldUp, speed);
+  if(keys["q"] || keys["c"])          camera.position.addScaledVector(worldUp, -speed);
 
   renderer.render(scene, camera);
 }
