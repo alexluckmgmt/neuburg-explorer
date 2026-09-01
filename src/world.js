@@ -72,31 +72,31 @@ function tiled(tex, repeatX, repeatY){
    Süden (Bullinger) zuerst, Norden (Donaukai) zuletzt.
    ============================================================ */
 export const LUITPOLD_PATH = [
-  { x: 83.58,  z: 325.76, note:"Bullinger/Münchener Str (Start)" },
-  { x: 90.83,  z: 313.63 },
-  { x: 91.70,  z: 312.23 },
-  { x: 98.52,  z: 301.27 },
-  { x: 114.24, z: 281.37 },
-  { x: 138.65, z: 256.44 },
-  { x: 147.49, z: 247.40 },
-  { x: 162.31, z: 232.46 },
-  { x: 174.89, z: 215.84, note:"~80/79/78 — Oracle-Ladenzeile" },
-  { x: 185.79, z: 199.64 },
-  { x: 201.83, z: 170.55 },
-  { x: 212.06, z: 150.86 },
-  { x: 217.91, z: 138.76 },
-  { x: 225.98, z: 123.41, note:"Rosenstraße-Kreuzung" },
-  { x: 230.15, z: 113.58 },
-  { x: 232.58, z: 107.39 },
-  { x: 238.30, z: 91.40 },
-  { x: 243.57, z: 75.75 },
-  { x: 246.25, z: 65.34 },
-  { x: 248.83, z: 48.22 },
-  { x: 250.81, z: 26.41 },
-  { x: 251.30, z: 20.07 },
-  { x: 251.46, z: 17.94 },
-  { x: 252.37, z: 14.68 },
-  { x: 254.18, z: 6.26,  note:"Schloss/Donaukai (Ziel)" }
+  { x: 83.58,  y: 0,     z: 325.76, note:"Bullinger/Münchener Str (Start)" },
+  { x: 90.83,  y: 0.24,  z: 313.63 },
+  { x: 91.70,  y: 0.27,  z: 312.23 },
+  { x: 98.52,  y: 0.54,  z: 301.27 },
+  { x: 114.24, y: 1.60,  z: 281.37 },
+  { x: 138.65, y: 3.44,  z: 256.44 },
+  { x: 147.49, y: 3.69,  z: 247.40 },
+  { x: 162.31, y: 2.81,  z: 232.46 },
+  { x: 174.89, y: 2.28,  z: 215.84, note:"~80/79/78 — Oracle-Ladenzeile" },
+  { x: 185.79, y: 2.25,  z: 199.64 },
+  { x: 201.83, y: 4.03,  z: 170.55 },
+  { x: 212.06, y: 6.36,  z: 150.86 },
+  { x: 217.91, y: 7.58,  z: 138.76 },
+  { x: 225.98, y: 8.17,  z: 123.41, note:"Rosenstraße-Kreuzung" },
+  { x: 230.15, y: 8.34,  z: 113.58 },
+  { x: 232.58, y: 8.55,  z: 107.39 },
+  { x: 238.30, y: 8.27,  z: 91.40 },
+  { x: 243.57, y: 7.25,  z: 75.75 },
+  { x: 246.25, y: 5.42,  z: 65.34 },
+  { x: 248.83, y: 2.52,  z: 48.22 },
+  { x: 250.81, y: -2.07, z: 26.41 },
+  { x: 251.30, y: -3.28, z: 20.07 },
+  { x: 251.46, y: -3.68, z: 17.94 },
+  { x: 252.37, y: -4.37, z: 14.68 },
+  { x: 254.18, y: -6.13, z: 6.26,  note:"Schloss/Donaukai (Ziel)" }
 ];
 
 /* Geschätzt aus Satellitenbild (Fahrbahn + Gehweg beidseitig), noch nicht
@@ -124,21 +124,42 @@ function pathDir(index){
   return { dirx: seg.dirx, dirz: seg.dirz, perpx: seg.perpx, perpz: seg.perpz };
 }
 
-/* Position + Richtung an Distanz `d` entlang der ganzen Strecke (für Laternen/Autos/Bäume) */
+/* Position + Richtung an Distanz `d` entlang der ganzen Strecke (für Laternen/Autos/Bäume).
+   y wird linear zwischen den beiden Wegpunkt-Höhen des Segments interpoliert. */
 function atDist(d, side = 0, sideOffset = 0){
   d = Math.max(0, Math.min(PATH_LEN, d));
   const seg = SEG.find(s => d <= s.to) || SEG[SEG.length-1];
   const local = d - seg.from;
+  const t = seg.len > 0 ? local/seg.len : 0;
   const x = seg.a.x + seg.dirx*local + seg.perpx*side*sideOffset;
   const z = seg.a.z + seg.dirz*local + seg.perpz*side*sideOffset;
-  return { x, z, perpx: seg.perpx, perpz: seg.perpz, dirx: seg.dirx, dirz: seg.dirz };
+  const y = seg.a.y + (seg.b.y - seg.a.y) * t;
+  return { x, y, z, perpx: seg.perpx, perpz: seg.perpz, dirx: seg.dirx, dirz: seg.dirz };
 }
 
 /* Position + Richtung an einem konkreten Wegpunkt-Index (für recherchierte Einzelgebäude) */
 function atIndex(index, side = 0, sideOffset = 0){
   const p = LUITPOLD_PATH[index];
   const d = pathDir(index);
-  return { x: p.x + d.perpx*side*sideOffset, z: p.z + d.perpz*side*sideOffset, perpx: d.perpx, perpz: d.perpz };
+  return { x: p.x + d.perpx*side*sideOffset, y: p.y, z: p.z + d.perpz*side*sideOffset, perpx: d.perpx, perpz: d.perpz };
+}
+
+/* Höhe des Geländes an einer beliebigen (x,z)-Position — projiziert auf das
+   nächste Straßensegment und interpoliert dessen Höhe. Für Objekte abseits
+   der Mittellinie (Gehweg, Grundriss-Overlay), die trotzdem auf dem echten
+   Höhenprofil sitzen sollen, statt in der Luft zu schweben. */
+function elevationAt(x, z){
+  let best = null, bestDist = Infinity;
+  for(const seg of SEG){
+    const dx = seg.b.x-seg.a.x, dz = seg.b.z-seg.a.z;
+    const len2 = dx*dx+dz*dz;
+    let t = len2>0 ? ((x-seg.a.x)*dx + (z-seg.a.z)*dz)/len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const px = seg.a.x + dx*t, pz = seg.a.z + dz*t;
+    const dd = Math.hypot(x-px, z-pz);
+    if(dd < bestDist){ bestDist = dd; best = seg.a.y + (seg.b.y-seg.a.y)*t; }
+  }
+  return best || 0;
 }
 
 /* rotation.y, damit die lokale +Z-Achse (Fassaden-Vorderseite) zur Straßenmitte zeigt */
@@ -167,7 +188,7 @@ function flatSegment(ax, az, bx, bz, width, mat, y = 0){
    Wegpunkte — statt einzelner gerader Segmente mit Flicken an den Knicken.
    Das eliminiert Kurven-Risse strukturell, egal wie scharf ein Knick ist. */
 const ROAD_CURVE = new THREE.CatmullRomCurve3(
-  LUITPOLD_PATH.map(p => new THREE.Vector3(p.x, 0, p.z)), false, "catmullrom", 0.35
+  LUITPOLD_PATH.map(p => new THREE.Vector3(p.x, p.y, p.z)), false, "catmullrom", 0.35
 );
 const CURVE_SAMPLES = Math.max(80, Math.round(PATH_LEN * 1.2));
 
@@ -178,14 +199,18 @@ function sampleCurve(count){
     const pt = ROAD_CURVE.getPointAt(u);
     const tan = ROAD_CURVE.getTangentAt(u);
     const len = Math.hypot(tan.x, tan.z) || 1;
-    out.push({ x: pt.x, z: pt.z, dirx: tan.x/len, dirz: tan.z/len, perpx: -tan.z/len, perpz: tan.x/len, u });
+    out.push({ x: pt.x, y: pt.y, z: pt.z, dirx: tan.x/len, dirz: tan.z/len, perpx: -tan.z/len, perpz: tan.x/len, u });
   }
   return out;
 }
 
-function buildRibbon(samples, width, material, y){
+/* yOffset wird zur ECHTEN Geländehöhe an jedem Punkt addiert (z.B. Bordstein-
+   Erhöhung), statt eine feste absolute Höhe zu sein — sonst würde das Band
+   beim Höhenprofil nicht mitgehen. */
+function buildRibbon(samples, width, material, yOffset){
   const pos = [], uv = [], idx = [];
   samples.forEach((s,i)=>{
+    const y = s.y + yOffset;
     pos.push(s.x + s.perpx*width/2, y, s.z + s.perpz*width/2);
     pos.push(s.x - s.perpx*width/2, y, s.z - s.perpz*width/2);
     const v = (s.u * PATH_LEN) / Math.max(1, width);
@@ -213,20 +238,23 @@ function buildStreetSurface(){
   const roadMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(asphaltTex, PATH_LEN/4, 1), gradientMap: getGradientMap(), side: THREE.DoubleSide });
   buildRibbon(samples, ROAD_W, roadMat, 0);
 
+  /* Gehweg jetzt mit echter Bordstein-Erhöhung über der Fahrbahn (~15cm),
+     statt fast bündig — folgt dabei dem echten Höhenprofil der Straße. */
+  const CURB_HEIGHT = 0.15;
   const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, PATH_LEN/2.5, WALK_W/2.5), gradientMap: getGradientMap(), side: THREE.DoubleSide });
   const offset = ROAD_W/2 + WALK_W/2;
   [1,-1].forEach(side=>{
     const offsetSamples = samples.map(s => ({ ...s, x: s.x + s.perpx*side*offset, z: s.z + s.perpz*side*offset }));
-    buildRibbon(offsetSamples, WALK_W, walkMat, 0.006);
+    buildRibbon(offsetSamples, WALK_W, walkMat, CURB_HEIGHT);
   });
 
-  /* gestrichelte Mittellinie */
+  /* gestrichelte Mittellinie — folgt dem Höhenprofil */
   const lineMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
   const dash = 1.1, gap = 0.9, step = dash+gap;
   for(let d=0; d<PATH_LEN; d+=step){
     const u0 = d/PATH_LEN, u1 = Math.min(PATH_LEN, d+dash)/PATH_LEN;
     const p0 = ROAD_CURVE.getPointAt(u0), p1 = ROAD_CURVE.getPointAt(u1);
-    flatSegment(p0.x,p0.z,p1.x,p1.z, 0.22, lineMat, 0.012);
+    flatSegment(p0.x,p0.z,p1.x,p1.z, 0.22, lineMat, (p0.y+p1.y)/2 + 0.012);
   }
 }
 
@@ -240,7 +268,9 @@ function buildBaseGround(){
   geo.rotateX(-Math.PI/2);
   const mat = new THREE.MeshToonMaterial({ color:"#b7b0a3", gradientMap: getGradientMap() });
   const ground = new THREE.Mesh(geo, mat);
-  ground.position.set(midX, -0.03, midZ);
+  /* Straße reicht bis -6m runter (Höhenprofil zur Donau) — Boden muss
+     darunter bleiben, sonst schneidet er durch die tiefsten Stellen. */
+  ground.position.set(midX, -8, midZ);
   scene.add(ground);
 }
 
@@ -696,30 +726,39 @@ const distAtIndex = (i) => i===0 ? 0 : SEG[i-1].to;
    Abgleichen "passt der Grundriss zum Satellitenbild", bevor ein
    einziges Haus tatsächlich gebaut wird.
    ============================================================ */
-function buildFlatArea(ptsXZ, color, y, opacity){
-  const shape = new THREE.Shape(ptsXZ.map(([x,z]) => new THREE.Vector2(x, -z)));
-  const geo = new THREE.ShapeGeometry(shape);
-  geo.rotateX(-Math.PI/2);
-  geo.translate(0, y, 0);
+/* pts3 = [[x,y,z], ...] — echte Höhe pro Punkt, statt einer festen Ebene.
+   Baut die Fläche über THREE.ShapeUtils.triangulateShape direkt in 3D auf
+   (kein rotateX-Trick nötig, der bei der Vertex-Reihenfolge zerbrechlich wäre). */
+function buildFlatArea(pts3, color, yOffset, opacity){
+  const shape2d = pts3.map(([x,,z]) => new THREE.Vector2(x, z));
+  const faces = THREE.ShapeUtils.triangulateShape(shape2d, []);
+  const pos = [];
+  pts3.forEach(([x,y,z]) => pos.push(x, y+yOffset, z));
+  const idx = [];
+  faces.forEach(f => idx.push(f[0], f[1], f[2]));
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos,3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
   const mat = new THREE.MeshBasicMaterial({ color, transparent:true, opacity, side: THREE.DoubleSide, depthWrite:false });
   const mesh = new THREE.Mesh(geo, mat);
   scene.add(mesh);
   return mesh;
 }
 
-function buildFlatRibbon(ptsXZ, width, color, y, opacity){
-  if(ptsXZ.length < 2) return null;
+function buildFlatRibbon(pts3, width, color, yOffset, opacity){
+  if(pts3.length < 2) return null;
   const half = width/2;
   const pos = [], idx = [];
-  ptsXZ.forEach((p,i)=>{
-    const prev = ptsXZ[Math.max(0,i-1)], next = ptsXZ[Math.min(ptsXZ.length-1,i+1)];
-    const dx = next[0]-prev[0], dz = next[1]-prev[1];
+  pts3.forEach(([x,y,z],i)=>{
+    const prev = pts3[Math.max(0,i-1)], next = pts3[Math.min(pts3.length-1,i+1)];
+    const dx = next[0]-prev[0], dz = next[2]-prev[2];
     const len = Math.hypot(dx,dz) || 1;
     const nx = -dz/len, nz = dx/len;
-    pos.push(p[0]+nx*half, y, p[1]+nz*half);
-    pos.push(p[0]-nx*half, y, p[1]-nz*half);
+    pos.push(x+nx*half, y+yOffset, z+nz*half);
+    pos.push(x-nx*half, y+yOffset, z-nz*half);
   });
-  for(let i=0;i<ptsXZ.length-1;i++){
+  for(let i=0;i<pts3.length-1;i++){
     const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3;
     idx.push(a,b,c, b,d,c);
   }
@@ -733,7 +772,30 @@ function buildFlatRibbon(ptsXZ, width, color, y, opacity){
   return mesh;
 }
 
-function groundLabel(text, x, z, size, color){
+/* Echte stehende Mauer (kein flaches Band) — Streifen von Geländehöhe bis
+   Geländehöhe+height, folgt dem Höhenprofil an jedem Punkt. */
+function buildWallStrip(pts3, height, color, opacity){
+  if(pts3.length < 2) return null;
+  const pos = [], idx = [];
+  pts3.forEach(([x,y,z]) => {
+    pos.push(x, y, z);
+    pos.push(x, y+height, z);
+  });
+  for(let i=0;i<pts3.length-1;i++){
+    const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3;
+    idx.push(a,b,c, b,d,c);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos,3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({ color, transparent:true, opacity, side: THREE.DoubleSide, depthWrite:false });
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+  return mesh;
+}
+
+function groundLabel(text, x, y, z, size, color){
   const canvas = document.createElement("canvas");
   canvas.width = 256; canvas.height = 128;
   const ctx = canvas.getContext("2d");
@@ -743,7 +805,7 @@ function groundLabel(text, x, z, size, color){
   const tex = new THREE.CanvasTexture(canvas);
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size*2, size), new THREE.MeshBasicMaterial({ map: tex, transparent:true, depthWrite:false }));
   mesh.rotation.x = -Math.PI/2;
-  mesh.position.set(x, 0.045, z);
+  mesh.position.set(x, y+0.045, z);
   scene.add(mesh);
 }
 
@@ -759,12 +821,18 @@ const SURFACE_WIDTH = {
   path_other: 1.8, steps: 2.0, wall: 0.45
 };
 
+const WALL_HEIGHT = 1.3; // geschätzt (Stadtmauer/Stützmauer) — noch nicht pro Mauer einzeln vermessen
+
 function buildPlanOverlay(){
   SURFACE_FEATURES.forEach(f => {
     const color = SURFACE_COLORS[f.cat] || "#5a6b78";
-    if(f.area){
+    if(f.cat === "wall"){
+      buildWallStrip(f.pts, WALL_HEIGHT, color, 0.85);
+    } else if(f.area){
       buildFlatArea(f.pts, color, f.cat === "grass" ? 0.0 : -0.005, 0.55);
     } else {
+      /* "steps" bekommt hier schon die echte Steigung als Rampe (aus den
+         Höhendaten) — echte einzelne Stufen kommen erst, wenn wir dort bauen. */
       buildFlatRibbon(f.pts, SURFACE_WIDTH[f.cat] || 1.6, color, 0.008, 0.75);
     }
   });
@@ -773,17 +841,18 @@ function buildPlanOverlay(){
     buildFlatRibbon(c.pts, 4.5, "#7ea3c7", 0.004, 0.3);
     if(c.pts.length){
       const mid = c.pts[Math.floor(c.pts.length/2)];
-      groundLabel(c.name, mid[0], mid[1], 2.2, "#7ea3c7");
+      groundLabel(c.name, mid[0], mid[1], mid[2], 2.2, "#7ea3c7");
     }
   });
 
   BUILDING_FOOTPRINTS.forEach(b => {
     const fill = b.confirmed ? "#5fe0d8" : "#eaf3fb";
-    buildFlatArea(b.pts, fill, 0.02, b.confirmed ? 0.28 : 0.1);
+    const pts3 = b.pts.map(([x,z]) => [x, elevationAt(x,z), z]);
+    buildFlatArea(pts3, fill, 0.02, b.confirmed ? 0.28 : 0.1);
     if(b.housenumber){
       const cx = b.pts.reduce((s,p)=>s+p[0],0)/b.pts.length;
       const cz = b.pts.reduce((s,p)=>s+p[1],0)/b.pts.length;
-      groundLabel(b.housenumber, cx, cz, 1.6, b.confirmed ? "#0b2847" : "#3a4a5c");
+      groundLabel(b.housenumber, cx, elevationAt(cx,cz), cz, 1.6, b.confirmed ? "#0b2847" : "#3a4a5c");
     }
   });
 }
@@ -795,7 +864,7 @@ function buildDistanceMarkers(){
   for(let d=0; d<PATH_LEN; d+=50){
     const p = atDist(d, 0, 0);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,1.2,8), markMat);
-    post.position.set(p.x, 0.6, p.z);
+    post.position.set(p.x, p.y+0.6, p.z);
     scene.add(post); addOutline(post, scene, 0.03);
   }
 }
