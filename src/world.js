@@ -850,9 +850,15 @@ function buildPlanOverlay(){
   });
 
   BUILDING_FOOTPRINTS.forEach(b => {
-    const fill = b.confirmed ? "#5fe0d8" : "#eaf3fb";
+    /* Vorher fast unsichtbar (helle Farbe, 10-28% Deckkraft auf beigem
+       Boden) — jetzt kräftige Füllung + fetter dunkler Rand, damit die
+       Grundrisse wie echte Stadtblöcke aussehen, nicht wie ein Geist. */
+    const fill = b.confirmed ? "#2fa89e" : "#c98a5e";
+    const edge = b.confirmed ? "#0b3532" : "#4a3020";
     const pts3 = b.pts.map(([x,z]) => [x, elevationAt(x,z), z]);
-    buildFlatArea(pts3, fill, 0.02, b.confirmed ? 0.28 : 0.1);
+    buildFlatArea(pts3, fill, 0.02, 0.8);
+    const ring = pts3.concat([pts3[0]]);
+    buildFlatRibbon(ring, 0.5, edge, 0.025, 1);
     if(b.housenumber){
       const cx = b.pts.reduce((s,p)=>s+p[0],0)/b.pts.length;
       const cz = b.pts.reduce((s,p)=>s+p[1],0)/b.pts.length;
