@@ -39,7 +39,10 @@ function onPointerMove(e){
   const dx = e.clientX - lastX, dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
   yaw -= dx * 0.0045;
-  pitch = Math.max(-1.55, Math.min(1.55, pitch - dy * 0.0045));
+  /* Vorher bis 88.8° (fast senkrecht) — nah an erhöhtem Gelände sah das dann
+     aus wie riesige Flächen "im Himmel" (reine Perspektiv-Verzerrung bei
+     extremem Blickwinkel, keine kaputten Daten). Enger begrenzt. */
+  pitch = Math.max(-1.3, Math.min(1.3, pitch - dy * 0.0045));
   applyLook();
 }
 function onPointerUp(e){
