@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuburg — Grundriss-Ansicht</title>
+<style>
+  html,body{ margin:0; padding:0; width:100%; height:100%; background:#1a1710; overflow:hidden; }
+  #canvasWrap{ position:fixed; inset:0; }
+  #hint{
+    position:fixed; left:12px; bottom:12px; z-index:10;
+    font:13px/1.5 system-ui,sans-serif; color:#eee; background:rgba(0,0,0,0.55);
+    padding:8px 12px; border-radius:8px; pointer-events:none; white-space:pre;
+  }
+</style>
+</head>
+<body>
+<div id="canvasWrap"></div>
+<div id="hint">Ziehen = drehen · Rechtsklick-ziehen / Shift+ziehen = verschieben · Scrollen = zoomen · WASD = verschieben</div>
+<script type="module" src="/src/planmode.js"></script>
+</body>
+</html>
