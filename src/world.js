@@ -5,6 +5,7 @@ import {
   createSkyTexture, createGrassTexture, createShadowTexture,
   createAsphaltTexture, createSidewalkTexture
 } from "./textures.js";
+import { BUILDING_FOOTPRINTS, SURFACE_FEATURES, CROSS_STREETS } from "./planData.js";
 
 export const canvasWrap = document.getElementById("canvasWrap");
 export const scene = new THREE.Scene();
@@ -688,6 +689,105 @@ function shade(hex, amt){
 
 const distAtIndex = (i) => i===0 ? 0 : SEG[i-1].to;
 
+/* ============================================================
+   GRUNDRISS-OVERLAY — projiziert die recherchierten OSM-Daten
+   (Gebäude-Umrisse, Beläge, Querstraßen aus planData.js) als
+   FLACHE Flächen/Linien auf den Boden. Keine 3D-Häuser — nur zum
+   Abgleichen "passt der Grundriss zum Satellitenbild", bevor ein
+   einziges Haus tatsächlich gebaut wird.
+   ============================================================ */
+function buildFlatArea(ptsXZ, color, y, opacity){
+  const shape = new THREE.Shape(ptsXZ.map(([x,z]) => new THREE.Vector2(x, -z)));
+  const geo = new THREE.ShapeGeometry(shape);
+  geo.rotateX(-Math.PI/2);
+  geo.translate(0, y, 0);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent:true, opacity, side: THREE.DoubleSide, depthWrite:false });
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+  return mesh;
+}
+
+function buildFlatRibbon(ptsXZ, width, color, y, opacity){
+  if(ptsXZ.length < 2) return null;
+  const half = width/2;
+  const pos = [], idx = [];
+  ptsXZ.forEach((p,i)=>{
+    const prev = ptsXZ[Math.max(0,i-1)], next = ptsXZ[Math.min(ptsXZ.length-1,i+1)];
+    const dx = next[0]-prev[0], dz = next[1]-prev[1];
+    const len = Math.hypot(dx,dz) || 1;
+    const nx = -dz/len, nz = dx/len;
+    pos.push(p[0]+nx*half, y, p[1]+nz*half);
+    pos.push(p[0]-nx*half, y, p[1]-nz*half);
+  });
+  for(let i=0;i<ptsXZ.length-1;i++){
+    const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3;
+    idx.push(a,b,c, b,d,c);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos,3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({ color, transparent:true, opacity, side: THREE.DoubleSide, depthWrite:false });
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+  return mesh;
+}
+
+function groundLabel(text, x, z, size, color){
+  const canvas = document.createElement("canvas");
+  canvas.width = 256; canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = color; ctx.font = "bold 64px 'Space Grotesk', sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, 128, 64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size*2, size), new THREE.MeshBasicMaterial({ map: tex, transparent:true, depthWrite:false }));
+  mesh.rotation.x = -Math.PI/2;
+  mesh.position.set(x, 0.045, z);
+  scene.add(mesh);
+}
+
+const SURFACE_COLORS = {
+  cobblestone_road: "#8a7458", cobblestone_path: "#8a7458",
+  asphalt_path: "#3a4652", concrete_path: "#9aa6ac", pebble_path: "#7d8f7a",
+  grass_paver: "#6f8f5e", path_other: "#5a6b78", steps: "#c98a3c",
+  wall: "#b3543a", grass: "#3f7a46", parking: "#4a5560", water: "#2c5d82"
+};
+const SURFACE_WIDTH = {
+  cobblestone_road: 6.5, cobblestone_path: 2.4, asphalt_path: 2.2,
+  concrete_path: 1.8, pebble_path: 1.8, grass_paver: 2.0,
+  path_other: 1.8, steps: 2.0, wall: 0.45
+};
+
+function buildPlanOverlay(){
+  SURFACE_FEATURES.forEach(f => {
+    const color = SURFACE_COLORS[f.cat] || "#5a6b78";
+    if(f.area){
+      buildFlatArea(f.pts, color, f.cat === "grass" ? 0.0 : -0.005, 0.55);
+    } else {
+      buildFlatRibbon(f.pts, SURFACE_WIDTH[f.cat] || 1.6, color, 0.008, 0.75);
+    }
+  });
+
+  CROSS_STREETS.forEach(c => {
+    buildFlatRibbon(c.pts, 4.5, "#7ea3c7", 0.004, 0.3);
+    if(c.pts.length){
+      const mid = c.pts[Math.floor(c.pts.length/2)];
+      groundLabel(c.name, mid[0], mid[1], 2.2, "#7ea3c7");
+    }
+  });
+
+  BUILDING_FOOTPRINTS.forEach(b => {
+    const fill = b.confirmed ? "#5fe0d8" : "#eaf3fb";
+    buildFlatArea(b.pts, fill, 0.02, b.confirmed ? 0.28 : 0.1);
+    if(b.housenumber){
+      const cx = b.pts.reduce((s,p)=>s+p[0],0)/b.pts.length;
+      const cz = b.pts.reduce((s,p)=>s+p[1],0)/b.pts.length;
+      groundLabel(b.housenumber, cx, cz, 1.6, b.confirmed ? "#0b2847" : "#3a4a5c");
+    }
+  });
+}
+
 /* Kleine Distanzmarker alle 50m entlang der Straße — nur zur Kontrolle,
    ob die echte Länge/Kurve stimmt, bevor irgendein Haus gebaut wird. */
 function buildDistanceMarkers(){
@@ -704,6 +804,7 @@ function buildLuitpoldstrasse(){
   buildBaseGround();
   buildStreetSurface();
   buildDistanceMarkers();
+  buildPlanOverlay();
 
   /* --- Absichtlich NUR Grundriss/Linien: Straße + Gehwege + Meter-Marker.
      Keine Häuser, keine Mauer, kein Schloss — erst wenn diese Form gegen
@@ -719,10 +820,12 @@ export const STREET_SPAWN = atDist(5, WALL_SIDE, ROAD_W/2 + WALK_W/2);
 
 export const BOUNDS = (() => {
   const xs = LUITPOLD_PATH.map(p=>p.x), zs = LUITPOLD_PATH.map(p=>p.z);
+  /* Rand groß genug, damit man auch zu den Grundriss-Kontroll-Flächen
+     (Gebäude bis 45m, Querstraßen-Stubs bis 55m von der Mitte) hinlaufen kann. */
   return {
-    minX: Math.min(...xs) - 25,
-    maxX: Math.max(...xs) + 25,
-    minZ: Math.min(...zs) - 15,
-    maxZ: Math.max(...zs) + 15
+    minX: Math.min(...xs) - 60,
+    maxX: Math.max(...xs) + 60,
+    minZ: Math.min(...zs) - 60,
+    maxZ: Math.max(...zs) + 60
   };
 })();
