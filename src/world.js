@@ -71,32 +71,37 @@ function tiled(tex, repeatX, repeatY){
    (48.73738, 11.17858). x = Meter ostwärts, z = Meter südwärts.
    Süden (Bullinger) zuerst, Norden (Donaukai) zuletzt.
    ============================================================ */
+/* Höhe: die Luitpoldstraße/Fußgängerzone selbst ist in echt eben
+   (begradigt/terrassiert) — deshalb y=0 für den kompletten Verlauf,
+   auch wenn das grobe 25m-Geländemodell sie fälschlich als Hügel zeigte.
+   Nur Nebenflächen (Querstraßen, Wiese/Treppen Richtung Schloss) steigen
+   in planData.js an, jeweils ab 0 an der Berührungsstelle mit der Straße. */
 export const LUITPOLD_PATH = [
-  { x: 83.58,  y: 0,     z: 325.76, note:"Bullinger/Münchener Str (Start)" },
-  { x: 90.83,  y: 0.24,  z: 313.63 },
-  { x: 91.70,  y: 0.27,  z: 312.23 },
-  { x: 98.52,  y: 0.54,  z: 301.27 },
-  { x: 114.24, y: 1.60,  z: 281.37 },
-  { x: 138.65, y: 3.44,  z: 256.44 },
-  { x: 147.49, y: 3.69,  z: 247.40 },
-  { x: 162.31, y: 2.81,  z: 232.46 },
-  { x: 174.89, y: 2.28,  z: 215.84, note:"~80/79/78 — Oracle-Ladenzeile" },
-  { x: 185.79, y: 2.25,  z: 199.64 },
-  { x: 201.83, y: 4.03,  z: 170.55 },
-  { x: 212.06, y: 6.36,  z: 150.86 },
-  { x: 217.91, y: 7.58,  z: 138.76 },
-  { x: 225.98, y: 8.17,  z: 123.41, note:"Rosenstraße-Kreuzung" },
-  { x: 230.15, y: 8.34,  z: 113.58 },
-  { x: 232.58, y: 8.55,  z: 107.39 },
-  { x: 238.30, y: 8.27,  z: 91.40 },
-  { x: 243.57, y: 7.25,  z: 75.75 },
-  { x: 246.25, y: 5.42,  z: 65.34 },
-  { x: 248.83, y: 2.52,  z: 48.22 },
-  { x: 250.81, y: -2.07, z: 26.41 },
-  { x: 251.30, y: -3.28, z: 20.07 },
-  { x: 251.46, y: -3.68, z: 17.94 },
-  { x: 252.37, y: -4.37, z: 14.68 },
-  { x: 254.18, y: -6.13, z: 6.26,  note:"Schloss/Donaukai (Ziel)" }
+  { x: 83.58,  y: 0, z: 325.76, note:"Bullinger/Münchener Str (Start)" },
+  { x: 90.83,  y: 0, z: 313.63 },
+  { x: 91.70,  y: 0, z: 312.23 },
+  { x: 98.52,  y: 0, z: 301.27 },
+  { x: 114.24, y: 0, z: 281.37 },
+  { x: 138.65, y: 0, z: 256.44 },
+  { x: 147.49, y: 0, z: 247.40 },
+  { x: 162.31, y: 0, z: 232.46 },
+  { x: 174.89, y: 0, z: 215.84, note:"~80/79/78 — Oracle-Ladenzeile" },
+  { x: 185.79, y: 0, z: 199.64 },
+  { x: 201.83, y: 0, z: 170.55 },
+  { x: 212.06, y: 0, z: 150.86 },
+  { x: 217.91, y: 0, z: 138.76 },
+  { x: 225.98, y: 0, z: 123.41, note:"Rosenstraße-Kreuzung" },
+  { x: 230.15, y: 0, z: 113.58 },
+  { x: 232.58, y: 0, z: 107.39 },
+  { x: 238.30, y: 0, z: 91.40 },
+  { x: 243.57, y: 0, z: 75.75 },
+  { x: 246.25, y: 0, z: 65.34 },
+  { x: 248.83, y: 0, z: 48.22 },
+  { x: 250.81, y: 0, z: 26.41 },
+  { x: 251.30, y: 0, z: 20.07 },
+  { x: 251.46, y: 0, z: 17.94 },
+  { x: 252.37, y: 0, z: 14.68 },
+  { x: 254.18, y: 0, z: 6.26,  note:"Schloss/Donaukai (Ziel)" }
 ];
 
 /* Geschätzt aus Satellitenbild (Fahrbahn + Gehweg beidseitig), noch nicht
@@ -268,9 +273,8 @@ function buildBaseGround(){
   geo.rotateX(-Math.PI/2);
   const mat = new THREE.MeshToonMaterial({ color:"#b7b0a3", gradientMap: getGradientMap() });
   const ground = new THREE.Mesh(geo, mat);
-  /* Straße reicht bis -6m runter (Höhenprofil zur Donau) — Boden muss
-     darunter bleiben, sonst schneidet er durch die tiefsten Stellen. */
-  ground.position.set(midX, -8, midZ);
+  /* Straße ist eben (y=0) — Boden knapp darunter, nur um Z-Fighting zu vermeiden. */
+  ground.position.set(midX, -0.03, midZ);
   scene.add(ground);
 }
 
