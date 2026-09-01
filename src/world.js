@@ -883,11 +883,12 @@ function buildLuitpoldstrasse(){
   buildBaseGround();
   buildStreetSurface();
   buildDistanceMarkers();
-  buildPlanOverlay();
 
-  /* --- Absichtlich NUR Grundriss/Linien: Straße + Gehwege + Meter-Marker.
-     Keine Häuser, keine Mauer, kein Schloss — erst wenn diese Form gegen
-     das Satellitenbild bestätigt ist, kommt Haus für Haus dazu. --- */
+  /* --- Absichtlich NUR Straße + Gehweg + Meter-Marker. Gebäude, Querstraßen,
+     Mauern, Rasen etc. (buildPlanOverlay) sind erstmal komplett raus, bis
+     dieser reine Boden — Fahrbahn + Bordstein + Gehweg — wirklich passt. --- */
+  // buildPlanOverlay();
+
   return atDist(0,0,0);
 }
 
