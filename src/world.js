@@ -531,9 +531,22 @@ function buildOracleBuilding(index, side, setback){
 
   const g = new THREE.Group();
   addPart(g, rbox(W,H,D,0.06,2), "#E8896B").position.y = H/2;
-  addPart(g, rbox(W+0.3,0.3,D+0.3,0.05,2), "#f2ead8").position.y = H+0.15;
+
+  /* Satteldach mit rötlichen Ziegeln, First läuft parallel zur Fassade —
+     kein flaches Traufband mehr, echtes Schrägdach wie auf dem Foto. */
+  const roofRise = 1.35, overhang = 0.4;
+  const halfD = D/2 + overhang;
+  const slopeLen = Math.hypot(halfD, roofRise);
+  const slopeAngle = Math.atan2(roofRise, halfD);
+  const roofColor = "#a8402c";
+  [1,-1].forEach(dir=>{
+    const panel = addPart(g, rbox(W+0.5, 0.14, slopeLen, 0.03, 1), roofColor);
+    panel.position.set(0, H+roofRise/2, dir*halfD/2);
+    panel.rotation.x = dir*slopeAngle;
+  });
+  addPart(g, rbox(W+0.3,0.22,0.22,0.04,1), "#8a3323").position.set(0, H+roofRise, 0);
   /* kleiner Dach-/Traufversatz mittig — zwei zusammengebaute Häuser */
-  addPart(g, rbox(0.5,0.24,D+0.32,0.04,1), "#e2dbc9").position.set(-W*0.12, H+0.32, 0);
+  addPart(g, rbox(0.5,0.24,D+0.32,0.04,1), "#e2dbc9").position.set(-W*0.12, H+0.05, 0);
 
   /* Fensterreihe oben: 9 gleichmäßig verteilte Fenster, schlichter weißer Rahmen,
      Kreuzsprosse, 2 davon mit hellem Rollladen runter */
@@ -581,6 +594,10 @@ function buildOracleBuilding(index, side, setback){
     }
     cursor += seg.w + gap;
   });
+
+  /* durchgehende schwarze Markise/Blende über der GESAMTEN Ladenzeile, unter den
+     Oberfenstern — kragt vor die Fassade vor, wie im Foto. */
+  addPart(g, rbox(W-0.15, 0.18, 0.5, 0.03, 1), "#1c1720").position.set(0, 2.08, D/2+0.15);
 
   /* goldenes Fries-Schild "ORACLE Kebap & Pizza" über dem gesamten Oracle-Abschnitt */
   const oracleMid = (oracleSpan.min+oracleSpan.max)/2, oracleW = oracleSpan.max-oracleSpan.min;
