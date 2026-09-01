@@ -15,10 +15,15 @@ const PAD = 18;
 const spanX = BOUNDS.maxX - BOUNDS.minX;
 const spanZ = BOUNDS.maxZ - BOUNDS.minZ;
 
+/* Gleicher Maßstab für X und Z (kein separates Stretching pro Achse) —
+   sonst verzerrt das quadratische Canvas die echten Kurvenwinkel. */
 function toCanvas(x, z, size){
   const usable = size - PAD*2;
-  const cx = PAD + ((x - BOUNDS.minX) / spanX) * usable;
-  const cz = PAD + ((z - BOUNDS.minZ) / spanZ) * usable;
+  const scale = usable / Math.max(spanX, spanZ);
+  const offX = (usable - spanX*scale)/2;
+  const offZ = (usable - spanZ*scale)/2;
+  const cx = PAD + offX + (x - BOUNDS.minX) * scale;
+  const cz = PAD + offZ + (z - BOUNDS.minZ) * scale;
   return [cx, cz];
 }
 
