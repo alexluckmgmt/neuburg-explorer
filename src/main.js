@@ -28,11 +28,18 @@ function animate(now){
   const len = Math.hypot(mx,mz);
   if(len > 0.05){
     mx/=len || 1; mz/=len || 1;
-    player.position.x += mx * CONFIG.moveSpeed * dt * Math.min(len,1);
-    player.position.z += mz * CONFIG.moveSpeed * dt * Math.min(len,1);
+    /* Eingabe ist Stick-relativ ("hoch" = weg von der Kamera). Um camYaw
+       drehen, sonst kehrt sich die Steuerung um, sobald die Kamera gedreht wird. */
+    const cosY = Math.cos(camYaw.value), sinY = Math.sin(camYaw.value);
+    const rightX = cosY, rightZ = -sinY;
+    const fwdX = -sinY, fwdZ = -cosY;
+    const wx = mx*rightX - mz*fwdX;
+    const wz = mx*rightZ - mz*fwdZ;
+    player.position.x += wx * CONFIG.moveSpeed * dt * Math.min(len,1);
+    player.position.z += wz * CONFIG.moveSpeed * dt * Math.min(len,1);
     player.position.x = Math.max(BOUNDS.minX, Math.min(BOUNDS.maxX, player.position.x));
     player.position.z = Math.max(BOUNDS.minZ, Math.min(BOUNDS.maxZ, player.position.z));
-    const targetAngle = Math.atan2(mx, mz);
+    const targetAngle = Math.atan2(wx, wz);
     player.rotation.y += (targetAngle - player.rotation.y) * Math.min(1, dt*10);
   }
   playerShadow.position.set(player.position.x, 0.015, player.position.z);

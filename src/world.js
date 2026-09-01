@@ -501,87 +501,96 @@ function buildSchlossBackdrop(index, side, setback){
   fakeShadow(p.x,p.z,20);
 }
 
-/* "The Oracle": Lachs-Fassade, dunkle Ladenfront, Markise, Bordeaux-Stühle + Holztische */
-/* "78 Luitpoldstraße" — lange lachsfarbene Ladenzeile unter einem Dach:
-   links "Tabak & Shisha" (3 große Schaufenster), rechts "Oracle" Eiscafé
-   mit rotem Rundlogo, roten Stühlen und dunklen Tischen davor. Oben EINE
-   Fensterreihe mit weißen Giebel-Bögen (manche mit grauem Rollladen).
-   Maße aus Street View mit Türbreite (~0.9 m) als Referenz abgeschätzt:
-   Fassade ~17-18 m breit -> 10.5 Welteinheiten. */
+/* "79/78 Luitpoldstraße" — nach dem Referenzfoto (Street View, "79 Luitpoldstraße"):
+   lange lachsfarbene zweistöckige Ladenzeile. Unten links 3 dunkel gerahmte
+   Schaufenster ("Desserts & Baklava / Kaffee & Tee / Backwaren"), rechts das
+   "Oracle Kebap & Pizza" mit goldener Schrift auf dunklem Fries. Davor die
+   GANZE Fassade entlang eine durchgehende Reihe heller Holztische mit roten
+   Stühlen. Oben 9 Fenster mit weißem Rahmen + flachem weißem Giebelbogen,
+   ein Teil mit grauem Rollladen runter. Maße per Türbreite (~0.9m) aus
+   Street View abgeschätzt: Fassade ~18m -> 10.8 Welteinheiten. */
 function buildOracleBuilding(index, side, setback){
   const p = atIndex(index, side, setback);
   const faceAngle = facingRoadAngle(p.perpx, p.perpz, side);
-  const W = 10.6, H = 3.6, D = 4.6;
+  const W = 10.8, H = 3.6, D = 4.6;
   const g = new THREE.Group();
 
   addPart(g, rbox(W,H,D,0.06,2), "#E8896B").position.y = H/2;
-  addPart(g, rbox(W+0.3,0.3,D+0.3,0.05,2), "#f2ead8").position.y = H+0.15; // flaches Traufband, kein Spitzdach
+  addPart(g, rbox(W+0.3,0.3,D+0.3,0.05,2), "#f2ead8").position.y = H+0.15;
 
-  /* Fensterreihe oben: 7 Fenster mit weißem Giebelbogen, manche mit Rollladen */
-  const winCount = 7;
+  /* Fensterreihe oben: 9 Fenster, weißer Rahmen + flacher Giebelbogen, ~1/3 mit Rollladen */
+  const winCount = 9;
   for(let i=0;i<winCount;i++){
     const dx = -W/2 + W/(winCount+1)*(i+1);
-    const shuttered = i % 3 === 1;
-    addPart(g, rbox(0.72,0.9,0.08,0.03,1), shuttered ? "#8a8478" : "#3a5a72").position.set(dx, H*0.72, D/2-0.02);
-    addPart(g, rbox(0.86,0.12,0.1,0.03,1), "#f2ead8").position.set(dx, H*0.72-0.51, D/2-0.02);
-    const pediment = addPart(g, new THREE.ConeGeometry(0.5,0.3,3), "#f2ead8");
-    pediment.position.set(dx, H*0.72+0.56, D/2-0.02);
-    pediment.rotation.z = Math.PI;
-    pediment.rotation.y = Math.PI/2;
+    const shuttered = i===1 || i===4 || i===7;
+    addPart(g, rbox(0.62,0.86,0.1,0.04,1), "#f2ead8").position.set(dx, H*0.71, D/2-0.03);
+    addPart(g, rbox(0.5,0.72,0.03,0.02,1), shuttered ? "#9a9488" : "#3a5a72").position.set(dx, H*0.71, D/2+0.01);
+    if(!shuttered){
+      addPart(g, rbox(0.02,0.72,0.05,0.01,1), "#f2ead8").position.set(dx, H*0.71, D/2+0.03);
+    }
+    const arch = addPart(g, new THREE.CylinderGeometry(0.31,0.31,0.1,12,1,false,0,Math.PI), "#f2ead8");
+    arch.rotation.z = Math.PI/2; arch.rotation.y = Math.PI/2;
+    arch.position.set(dx, H*0.71+0.43, D/2-0.02);
   }
 
-  /* Ladenzeile unten: links "Tabak & Shisha" (3 breite Fenster), rechts "Oracle" schmaler */
-  addPart(g, rbox(W*0.62,1.7,0.12,0.04,1), "#241e2c").position.set(-W*0.16, 1.05, D/2-0.02);
-  [-W*0.35,-W*0.16,W*0.03].forEach(dx=>{
-    addPart(g, rbox(W*0.16,1.35,0.05,0.03,1), "#2a2a3a").position.set(dx, 1.1, D/2+0.02);
+  /* Ladenzeile unten: links 3 Schaufenster (Desserts/Kaffee/Backwaren), rechts Oracle-Front */
+  const shopH = 1.9, shopY = 0.98;
+  addPart(g, rbox(W*0.58,shopH,0.14,0.04,1), "#2c2430").position.set(-W*0.19, shopY, D/2-0.03);
+  [-W*0.38,-W*0.19,W*0.0].forEach((dx,i)=>{
+    addPart(g, rbox(0.15,shopH-0.15,0.08,0.02,1), "#100e14").position.set(dx-W*0.09, shopY, D/2+0.01);
+    addPart(g, rbox(W*0.15,shopH-0.35,0.05,0.02,1), "#bcd9e6").position.set(dx, shopY+0.05, D/2+0.03);
   });
-  addPart(g, rbox(W*0.28,1.7,0.12,0.04,1), "#2c2430").position.set(W*0.34, 1.05, D/2-0.02);
-  addPart(g, rbox(W*0.22,1.35,0.05,0.03,1), "#2a2a3a").position.set(W*0.34, 1.1, D/2+0.02);
-  const logo = addPart(g, new THREE.CylinderGeometry(0.42,0.42,0.08,16), "#8B2E3C");
-  logo.rotation.x = Math.PI/2;
-  logo.position.set(-W*0.44, 2.0, D/2+0.05);
+  addPart(g, rbox(W*0.34,shopH,0.14,0.04,1), "#241e2c").position.set(W*0.32, shopY, D/2-0.03);
+  addPart(g, rbox(0.15,shopH-0.15,0.08,0.02,1), "#100e14").position.set(W*0.15, shopY, D/2+0.01);
+  addPart(g, rbox(W*0.24,shopH-0.35,0.05,0.02,1), "#8fb8cc").position.set(W*0.34, shopY+0.05, D/2+0.03);
+  /* Tür rechts */
+  addPart(g, rbox(0.85,shopH-0.05,0.06,0.02,1), "#100e14").position.set(W*0.47, shopY-0.02, D/2+0.02);
 
+  /* goldenes Fries-Schild "ORACLE Kebap & Pizza" über dem rechten Ladenteil */
   const signCanvas = document.createElement("canvas");
-  signCanvas.width = 512; signCanvas.height = 96;
+  signCanvas.width = 768; signCanvas.height = 128;
   const sctx = signCanvas.getContext("2d");
-  sctx.fillStyle = "#8B2E3C"; sctx.fillRect(0,0,512,96);
-  sctx.fillStyle = "#f2ead8"; sctx.font = "bold 44px 'Space Grotesk', sans-serif"; sctx.textAlign = "center"; sctx.textBaseline = "middle";
-  sctx.fillText("ORACLE", 256, 50);
+  sctx.fillStyle = "#241e2c"; sctx.fillRect(0,0,768,128);
+  sctx.fillStyle = "#d8b45a"; sctx.textAlign = "center"; sctx.textBaseline = "middle";
+  sctx.font = "bold 46px 'Space Grotesk', sans-serif"; sctx.fillText("ORACLE", 384, 46);
+  sctx.font = "28px 'Space Grotesk', sans-serif"; sctx.fillText("Kebap & Pizza", 384, 92);
   const signTex = new THREE.CanvasTexture(signCanvas);
-  const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(W*0.24,0.55), new THREE.MeshBasicMaterial({ map: signTex, transparent:true }));
-  signMesh.position.set(W*0.34, 1.95, D/2+0.06);
+  const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(W*0.32,0.5), new THREE.MeshBasicMaterial({ map: signTex, transparent:true }));
+  signMesh.position.set(W*0.32, 1.98, D/2+0.06);
   g.add(signMesh);
 
   g.position.set(p.x,0,p.z);
   g.rotation.y = faceAngle;
   scene.add(g);
-  fakeShadow(p.x,p.z,6.2);
+  fakeShadow(p.x,p.z,6.4);
 
-  /* rote Stühle + dunkle Tischchen vor dem Oracle-Teil (rechte Fassadenhälfte) */
+  /* durchgehende Reihe heller Holztische + roter Stühle vor der GANZEN Fassade */
   const dirx = Math.sin(faceAngle), dirz = Math.cos(faceAngle);
   const sidex = Math.cos(faceAngle), sidez = -Math.sin(faceAngle);
-  const tableTop = new THREE.CylinderGeometry(0.35,0.35,0.05,14);
-  const tableLeg = new THREE.CylinderGeometry(0.04,0.04,0.68,8);
-  const chairSeat = new THREE.BoxGeometry(0.36,0.06,0.36);
-  const chairBack = new THREE.BoxGeometry(0.36,0.42,0.05);
-  [W*0.20, W*0.40].forEach(lx=>{
-    const tx = p.x + dirx*2.6 + sidex*lx, tz = p.z + dirz*2.6 + sidez*lx;
-    const table = new THREE.Mesh(tableTop, toonMaterial("#2c2430"));
+  const tableTop = new THREE.CylinderGeometry(0.32,0.32,0.05,14);
+  const tableLeg = new THREE.CylinderGeometry(0.035,0.035,0.68,8);
+  const chairSeat = new THREE.BoxGeometry(0.34,0.05,0.34);
+  const chairBack = new THREE.BoxGeometry(0.34,0.4,0.04);
+  const woodColor = "#c9a876";
+  const tablePositions = [-W*0.42,-W*0.28,-W*0.09, W*0.10, W*0.26, W*0.42];
+  tablePositions.forEach(lx=>{
+    const tx = p.x + dirx*2.5 + sidex*lx, tz = p.z + dirz*2.5 + sidez*lx;
+    const table = new THREE.Mesh(tableTop, toonMaterial(woodColor));
     table.position.set(tx,0.68,tz);
     scene.add(table); addOutline(table, scene, 0.04);
-    const leg = new THREE.Mesh(tableLeg, toonMaterial("#2c2430"));
+    const leg = new THREE.Mesh(tableLeg, toonMaterial(woodColor));
     leg.position.set(tx,0.34,tz);
     scene.add(leg);
-    [[-0.5,-0.15],[0.5,-0.15]].forEach(([cx,cz])=>{
+    [[-0.42,-0.18],[0.42,-0.18]].forEach(([cx,cz])=>{
       const seat = new THREE.Mesh(chairSeat, toonMaterial("#B23A3A"));
       seat.position.set(tx+cx,0.4,tz+cz);
       scene.add(seat); addOutline(seat, scene, 0.04);
       const back = new THREE.Mesh(chairBack, toonMaterial("#B23A3A"));
-      back.position.set(tx+cx*1.2,0.62,tz+cz*1.2-0.15);
+      back.position.set(tx+cx*1.15,0.62,tz+cz*1.15-0.13);
       back.lookAt(tx,0.62,tz);
       scene.add(back); addOutline(back, scene, 0.04);
     });
-    fakeShadow(tx,tz,0.9);
+    fakeShadow(tx,tz,0.85);
   });
 
   return p;
