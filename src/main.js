@@ -13,7 +13,7 @@ buildWorld();
 /* ============================================================
    GAME LOOP
    ============================================================ */
-const camOffset = new THREE.Vector3(0, 19, 14);
+const camOffset = new THREE.Vector3(0, 9.5, 12.5);
 const camTarget = new THREE.Vector3();
 let lastTime = performance.now();
 

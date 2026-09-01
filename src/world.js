@@ -623,76 +623,11 @@ function buildLuitpoldstrasse(){
   const heroDistances = [];
   const markHero = (i) => heroDistances.push(distAtIndex(i));
 
-  /* --- Süden: Bullinger-Kreuzung --- */
-  heroBuilding(0, SHOP_SIDE, ROAD_W/2+WALK_W+3.4, { w:7.5, h:5.4, d:4.2, color:"#c9b79a", trim:"#8a7a5c", dormer:false, shopband:true, windowColor:"#dfe4e2" });
-  markHero(0);
-  heroBuilding(0, WALL_SIDE, ROAD_W/2+WALK_W+3.2, { w:7.8, h:6.0, d:4.4, color:"#e9e5da", trim:"#c9c2b0", dormer:false, shopband:true });
-  markHero(0);
-  heroBuilding(1, SHOP_SIDE, ROAD_W/2+WALK_W+3.0, { w:5.6, h:4.4, d:3.4, color:"#8fa682", trim:"#f2ead8", shopband:true }); // Wiedemann & Roßkopf
-  markHero(1);
-
-  /* --- Aufgang zur Ladenzeile mit Treppe (zwischen 0 und 2) --- */
-  const stairsBase = atDist((distAtIndex(1)+distAtIndex(2))/2, SHOP_SIDE, ROAD_W/2+WALK_W+0.2);
-  const stairs = new THREE.Mesh(rbox(3.2,1.1,2.6,0.1,2), toonMaterial("#c9c2b6"));
-  stairs.position.set(stairsBase.x, 0.55, stairsBase.z);
-  scene.add(stairs); addOutline(stairs, scene, 0.05);
-  railingSegment(distAtIndex(1)+2, distAtIndex(2)-2);
-
-  /* --- "80" The Oracle / Bäckerei mit roten Bänken --- */
+  /* --- NUR die Straße + das eine recherchierte Oracle-Haus. Alles andere
+     (übrige Häuser, Mauer, Schloss, Denkmal, Bänke, Laternen, Reihenhaus-
+     Füller) ist absichtlich raus, bis dieser eine Baustein wirklich passt. --- */
   const oraclePos = buildOracleBuilding(2, SHOP_SIDE, ROAD_W/2+WALK_W+3.8);
   markHero(2);
-  /* --- "75" Optik --- */
-  buildOptikBuilding(6, SHOP_SIDE, ROAD_W/2+WALK_W+4.2);
-  markHero(6);
-  /* --- "74" Rosenstraße-Ecke, Betten Uerheimer --- */
-  heroBuilding(7, SHOP_SIDE, ROAD_W/2+WALK_W+4.0, { w:8.2, h:5.0, d:4.4, color:"#e0c368", trim:"#8a6a3a", dormer:true, shopband:true });
-  markHero(7);
-  crosswalk(7);
-  /* --- "70" VR Bank + Herrnbräu-Café / großes Eckhaus --- */
-  buildGrandBuilding(9, SHOP_SIDE, ROAD_W/2+WALK_W+4.6);
-  markHero(9);
-  heroBuilding(9, SHOP_SIDE, ROAD_W/2+WALK_W+9.5, { w:5.5, h:4.0, d:3.4, color:"#f2ead8", trim:"#8a2a2a", roof:"#8a2a2a", awning:true, dormer:false });
-  markHero(9);
-  buildMonumentGreen(9);
-  /* --- "66" Backhaus Hackner (blaues Jugendstilhaus) --- */
-  buildBackhausHackner(10, SHOP_SIDE, ROAD_W/2+WALK_W+4.2);
-  markHero(10);
-  /* --- IL Pinguino Eiscafé --- */
-  heroBuilding(13, SHOP_SIDE, ROAD_W/2+WALK_W+3.6, { w:5.0, h:5.2, d:3.4, color:"#e9e5da", trim:"#c9c2b0", awning:true, dormer:false });
-  markHero(13);
-  /* --- Schloss: großer Fernblick-Baukörper auf der gegenüberliegenden Seite,
-     deutlich zurückgesetzt (steht in echt auf einem Felsen, nicht am Bordstein) --- */
-  buildSchlossBackdrop(11, WALL_SIDE, ROAD_W/2+WALK_W+38);
-  /* --- Oskar's Bar, Übergang zur Flusspromenade --- */
-  heroBuilding(16, SHOP_SIDE, ROAD_W/2+WALK_W+3.4, { w:6.5, h:6.5, d:4.0, color:"#e9dfc0", trim:"#c9bfa0", dormer:true, shopband:true });
-  markHero(16);
-
-  /* --- Lücken auf der Ladenseite mit eng anliegenden Reihenhäusern schließen --- */
-  const shopPalette = ["#D9A441","#C9A98B","#E8C77E","#B5562F","#dcd0b8"];
-  let colorIdx = 0;
-  for(let d = 8; d <= PATH_LEN-8; d += 6.0){
-    if(heroDistances.some(hd => Math.abs(hd-d) < 7)) continue;
-    fillerRowHouse(d, SHOP_SIDE, shopPalette[colorIdx % shopPalette.length], colorIdx % 2 === 0);
-    colorIdx++;
-  }
-
-  /* --- Efeu-Mauer entlang der recherchierten Rot-Laub-Strecke (77-75) --- */
-  const wallFrom = distAtIndex(4), wallTo = distAtIndex(6);
-  for(let d = wallFrom; d <= wallTo; d += 6.5) ivyWallSegment(d);
-
-  /* --- Donauufer-Promenade: Geländer + Bänke am Nordende --- */
-  railingSegment(distAtIndex(17), PATH_LEN-2);
-  [18,19,20,21].forEach(i=>{
-    const p = atIndex(i, WALL_SIDE, ROAD_W/2+WALK_W+1.4);
-    const bench = new THREE.Mesh(rbox(1.4,0.5,0.55,0.08,1), toonMaterial("#6b4a3a"));
-    bench.position.set(p.x,0.28,p.z);
-    bench.rotation.y = facingRoadAngle(p.perpx,p.perpz,WALL_SIDE);
-    scene.add(bench); addOutline(bench, scene, 0.05);
-    fakeShadow(p.x,p.z,1.0);
-  });
-
-  /* --- Laternen entlang der ganzen Strecke (keine Autos — auf Wunsch weggelassen) --- */
-  for(let d = 10; d <= PATH_LEN-10; d += 16) streetLamp(d, SHOP_SIDE);
 
   return oraclePos;
 }
