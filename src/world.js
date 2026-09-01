@@ -63,41 +63,44 @@ function tiled(tex, repeatX, repeatY){
 }
 
 /* ============================================================
-   LUITPOLDSTRASSE — der komplette echte Straßenverlauf, aus
-   den tatsächlichen Adress-Koordinaten (Google Street View)
-   von "Modehaus Bullinger" (Süden, Münchener Str.) bis zum
-   "Neo Kastro"/Donaukai im Norden, inkl. der Rechtskurve am
-   Schloss vorbei zur Donau. Jeder Punkt entspricht einer real
-   begangenen Hausnummer. Positionen ~0.6x echte Meter, Ursprung
-   bei Karlsplatz (48.73738, 11.17858).
+   LUITPOLDSTRASSE — echte Straßen-Mittellinie aus OpenStreetMap
+   (6 zusammenhängende Way-Segmente, per Way-ID verifiziert),
+   nicht mehr aus Street-View-Drehungen geschätzt. Maßstab 1:1 —
+   1 Einheit = 1 realer Meter. Ursprung bei Karlsplatz
+   (48.73738, 11.17858). x = Meter ostwärts, z = Meter südwärts.
+   Süden (Bullinger) zuerst, Norden (Donaukai) zuletzt.
    ============================================================ */
 export const LUITPOLD_PATH = [
-  { x: 59.0,  z: 211.7, note:"Bullinger/Münchener Str (Start)" },
-  { x: 63.0,  z: 192.0, note:"Treppen-Ladenzeile Anfang" },
-  { x: 67.4,  z: 173.1, note:"80 — Oracle/Bäckerei" },
-  { x: 73.4,  z: 166.3, note:"79" },
-  { x: 77.6,  z: 161.9, note:"78" },
-  { x: 81.9,  z: 157.4, note:"77 — Mauer/Efeu beginnt" },
-  { x: 90.7,  z: 148.5, note:"75 — Optik" },
-  { x: 107.7, z: 129.3, note:"74 — Rosenstraße/Betten Uerheimer" },
-  { x: 117.1, z: 113.6, note:"73" },
-  { x: 125.7, z: 97.2,  note:"70 — VR Bank / Herrnbräu-Café" },
-  { x: 131.0, z: 78.9,  note:"66 — Backhaus Hackner" },
-  { x: 133.4, z: 73.3,  note:"66 Fortsetzung" },
-  { x: 137.9, z: 62.1,  note:"Schloss-Nahblick" },
-  { x: 143.9, z: 50.4,  note:"IL Pinguino" },
-  { x: 147.4, z: 38.0,  note:"65" },
-  { x: 148.9, z: 11.0,  note:"2" },
-  { x: 153.7, z: 5.0,   note:"1 — Schloss-Basis" },
-  { x: 156.1, z: -0.84, note:"Oskar-Wittmann-Str" },
-  { x: 158.9, z: -6.43 },
-  { x: 161.6, z: -11.6 },
-  { x: 164.8, z: -16.2 },
-  { x: 169.4, z: -20.7, note:"Flussuferzone" },
-  { x: 176.4, z: -17.4, note:"Neo Kastro / Donaukai (Ziel)" }
+  { x: 83.58,  z: 325.76, note:"Bullinger/Münchener Str (Start)" },
+  { x: 90.83,  z: 313.63 },
+  { x: 91.70,  z: 312.23 },
+  { x: 98.52,  z: 301.27 },
+  { x: 114.24, z: 281.37 },
+  { x: 138.65, z: 256.44 },
+  { x: 147.49, z: 247.40 },
+  { x: 162.31, z: 232.46 },
+  { x: 174.89, z: 215.84, note:"~80/79/78 — Oracle-Ladenzeile" },
+  { x: 185.79, z: 199.64 },
+  { x: 201.83, z: 170.55 },
+  { x: 212.06, z: 150.86 },
+  { x: 217.91, z: 138.76 },
+  { x: 225.98, z: 123.41, note:"Rosenstraße-Kreuzung" },
+  { x: 230.15, z: 113.58 },
+  { x: 232.58, z: 107.39 },
+  { x: 238.30, z: 91.40 },
+  { x: 243.57, z: 75.75 },
+  { x: 246.25, z: 65.34 },
+  { x: 248.83, z: 48.22 },
+  { x: 250.81, z: 26.41 },
+  { x: 251.30, z: 20.07 },
+  { x: 251.46, z: 17.94 },
+  { x: 252.37, z: 14.68 },
+  { x: 254.18, z: 6.26,  note:"Schloss/Donaukai (Ziel)" }
 ];
 
-const ROAD_W = 10.5, WALK_W = 2.6;
+/* Geschätzt aus Satellitenbild (Fahrbahn + Gehweg beidseitig), noch nicht
+   pro Abschnitt einzeln vermessen — kommt in der nächsten Recherche-Runde. */
+const ROAD_W = 8.5, WALK_W = 2.2;
 const SHOP_SIDE = 1;   // recherchierte Häuserzeile
 const WALL_SIDE = -1;  // Mauer / Schloss / Donauseite
 
@@ -685,27 +688,34 @@ function shade(hex, amt){
 
 const distAtIndex = (i) => i===0 ? 0 : SEG[i-1].to;
 
+/* Kleine Distanzmarker alle 50m entlang der Straße — nur zur Kontrolle,
+   ob die echte Länge/Kurve stimmt, bevor irgendein Haus gebaut wird. */
+function buildDistanceMarkers(){
+  const markMat = toonMaterial("#c9432f");
+  for(let d=0; d<PATH_LEN; d+=50){
+    const p = atDist(d, 0, 0);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,1.2,8), markMat);
+    post.position.set(p.x, 0.6, p.z);
+    scene.add(post); addOutline(post, scene, 0.03);
+  }
+}
+
 function buildLuitpoldstrasse(){
   buildBaseGround();
   buildStreetSurface();
+  buildDistanceMarkers();
 
-  const heroDistances = [];
-  const markHero = (i) => heroDistances.push(distAtIndex(i));
-
-  /* --- NUR die Straße + das eine recherchierte Oracle-Haus. Alles andere
-     (übrige Häuser, Mauer, Schloss, Denkmal, Bänke, Laternen, Reihenhaus-
-     Füller) ist absichtlich raus, bis dieser eine Baustein wirklich passt. --- */
-  const oraclePos = buildOracleBuilding(2, SHOP_SIDE, ROAD_W/2+WALK_W+3.8);
-  markHero(2);
-
-  return oraclePos;
+  /* --- Absichtlich NUR Grundriss/Linien: Straße + Gehwege + Meter-Marker.
+     Keine Häuser, keine Mauer, kein Schloss — erst wenn diese Form gegen
+     das Satellitenbild bestätigt ist, kommt Haus für Haus dazu. --- */
+  return atDist(0,0,0);
 }
 
 export function buildWorld(){
   buildLuitpoldstrasse();
 }
 
-export const STREET_SPAWN = atDist(distAtIndex(2)+3, WALL_SIDE, ROAD_W/2 + WALK_W/2);
+export const STREET_SPAWN = atDist(5, WALL_SIDE, ROAD_W/2 + WALK_W/2);
 
 export const BOUNDS = (() => {
   const xs = LUITPOLD_PATH.map(p=>p.x), zs = LUITPOLD_PATH.map(p=>p.z);
