@@ -112,13 +112,12 @@ for(let i=0;i<LUITPOLD_PATH.length-1;i++){
 }
 const PATH_LEN = cum;
 
-/* Richtung/Perpendikulare an einem Wegpunkt-Index (Mittel aus an- und abgehendem Segment) */
+/* Richtung/Perpendikulare an einem Wegpunkt-Index — nimmt bewusst NUR ein
+   angrenzendes Segment (nicht den Mittelwert beider), weil das Mitteln an
+   scharfen Kurven eine völlig falsche Richtung ergeben kann. */
 function pathDir(index){
-  const segA = SEG[Math.max(0, index-1)];
-  const segB = SEG[Math.min(SEG.length-1, index)];
-  const dirx = (segA.dirx+segB.dirx)/2, dirz = (segA.dirz+segB.dirz)/2;
-  const len = Math.hypot(dirx,dirz) || 1;
-  return { dirx: dirx/len, dirz: dirz/len, perpx: -dirz/len, perpz: dirx/len };
+  const seg = SEG[index] || SEG[index-1];
+  return { dirx: seg.dirx, dirz: seg.dirz, perpx: seg.perpx, perpz: seg.perpz };
 }
 
 /* Position + Richtung an Distanz `d` entlang der ganzen Strecke (für Laternen/Autos/Bäume) */
@@ -160,45 +159,83 @@ function flatSegment(ax, az, bx, bz, width, mat, y = 0){
   return mesh;
 }
 
-function buildStreetSurface(){
-  const asphaltTex = createAsphaltTexture();
-  const sidewalkTex = createSidewalkTexture();
-  const lineMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
-  const offset = ROAD_W/2 + WALK_W/2;
+/* Die Straße als EIN durchgehendes, weiches Band entlang einer Kurve durch alle
+   Wegpunkte — statt einzelner gerader Segmente mit Flicken an den Knicken.
+   Das eliminiert Kurven-Risse strukturell, egal wie scharf ein Knick ist. */
+const ROAD_CURVE = new THREE.CatmullRomCurve3(
+  LUITPOLD_PATH.map(p => new THREE.Vector3(p.x, 0, p.z)), false, "catmullrom", 0.35
+);
+const CURVE_SAMPLES = Math.max(80, Math.round(PATH_LEN * 1.2));
 
-  SEG.forEach(seg => {
-    const roadMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(asphaltTex, Math.max(1,seg.len/4), 1), gradientMap: getGradientMap() });
-    flatSegment(seg.a.x, seg.a.z, seg.b.x, seg.b.z, ROAD_W, roadMat, 0);
-
-    const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, Math.max(1,seg.len/2.5), WALK_W/2.5), gradientMap: getGradientMap() });
-    [1,-1].forEach(side=>{
-      const wa = { x: seg.a.x + seg.perpx*side*offset, z: seg.a.z + seg.perpz*side*offset };
-      const wb = { x: seg.b.x + seg.perpx*side*offset, z: seg.b.z + seg.perpz*side*offset };
-      flatSegment(wa.x, wa.z, wb.x, wb.z, WALK_W, walkMat, 0.006);
-    });
-
-    const dash = 1.1, gap = 0.9;
-    let t = 0;
-    while(t < seg.len){
-      const t1 = Math.min(seg.len, t+dash);
-      const p0 = { x: seg.a.x+seg.dirx*t, z: seg.a.z+seg.dirz*t };
-      const p1 = { x: seg.a.x+seg.dirx*t1, z: seg.a.z+seg.dirz*t1 };
-      flatSegment(p0.x,p0.z,p1.x,p1.z, 0.22, lineMat, 0.012);
-      t += dash+gap;
-    }
-  });
+function sampleCurve(count){
+  const out = [];
+  for(let i=0;i<=count;i++){
+    const u = i/count;
+    const pt = ROAD_CURVE.getPointAt(u);
+    const tan = ROAD_CURVE.getTangentAt(u);
+    const len = Math.hypot(tan.x, tan.z) || 1;
+    out.push({ x: pt.x, z: pt.z, dirx: tan.x/len, dirz: tan.z/len, perpx: -tan.z/len, perpz: tan.x/len, u });
+  }
+  return out;
 }
 
-/* Große Grasfläche unter allem — Gebäude stehen direkt dahinter, kein Feld-Look */
+function buildRibbon(samples, width, material, y){
+  const pos = [], uv = [], idx = [];
+  samples.forEach((s,i)=>{
+    pos.push(s.x + s.perpx*width/2, y, s.z + s.perpz*width/2);
+    pos.push(s.x - s.perpx*width/2, y, s.z - s.perpz*width/2);
+    const v = (s.u * PATH_LEN) / Math.max(1, width);
+    uv.push(v,0, v,1);
+  });
+  for(let i=0;i<samples.length-1;i++){
+    const a=i*2,b=i*2+1,c=i*2+2,d=i*2+3;
+    idx.push(a,b,c, b,d,c);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv,2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, material);
+  scene.add(mesh);
+  return mesh;
+}
+
+function buildStreetSurface(){
+  const samples = sampleCurve(CURVE_SAMPLES);
+  const asphaltTex = createAsphaltTexture();
+  const sidewalkTex = createSidewalkTexture();
+
+  const roadMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(asphaltTex, PATH_LEN/4, 1), gradientMap: getGradientMap(), side: THREE.DoubleSide });
+  buildRibbon(samples, ROAD_W, roadMat, 0);
+
+  const walkMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(sidewalkTex, PATH_LEN/2.5, WALK_W/2.5), gradientMap: getGradientMap(), side: THREE.DoubleSide });
+  const offset = ROAD_W/2 + WALK_W/2;
+  [1,-1].forEach(side=>{
+    const offsetSamples = samples.map(s => ({ ...s, x: s.x + s.perpx*side*offset, z: s.z + s.perpz*side*offset }));
+    buildRibbon(offsetSamples, WALK_W, walkMat, 0.006);
+  });
+
+  /* gestrichelte Mittellinie */
+  const lineMat = new THREE.MeshBasicMaterial({ color:"#f2ead8" });
+  const dash = 1.1, gap = 0.9, step = dash+gap;
+  for(let d=0; d<PATH_LEN; d+=step){
+    const u0 = d/PATH_LEN, u1 = Math.min(PATH_LEN, d+dash)/PATH_LEN;
+    const p0 = ROAD_CURVE.getPointAt(u0), p1 = ROAD_CURVE.getPointAt(u1);
+    flatSegment(p0.x,p0.z,p1.x,p1.z, 0.22, lineMat, 0.012);
+  }
+}
+
+/* Neutraler Untergrund — bewusst KEIN Gras überall (das gibt's in echt so nicht).
+   Grasflächen kommen nur gezielt dort hin, wo es die Recherche zeigt (Denkmal-Rasen). */
 function buildBaseGround(){
-  const grassTex = createGrassTexture();
-  const grassMat = new THREE.MeshToonMaterial({ color:0xffffff, map: tiled(grassTex, 40, 46), gradientMap: getGradientMap() });
   const xs = LUITPOLD_PATH.map(p=>p.x), zs = LUITPOLD_PATH.map(p=>p.z);
   const midX = (Math.min(...xs)+Math.max(...xs))/2, midZ = (Math.min(...zs)+Math.max(...zs))/2;
   const w = (Math.max(...xs)-Math.min(...xs)) + 90, h = (Math.max(...zs)-Math.min(...zs)) + 60;
   const geo = new THREE.PlaneGeometry(w, h);
   geo.rotateX(-Math.PI/2);
-  const ground = new THREE.Mesh(geo, grassMat);
+  const mat = new THREE.MeshToonMaterial({ color:"#b7b0a3", gradientMap: getGradientMap() });
+  const ground = new THREE.Mesh(geo, mat);
   ground.position.set(midX, -0.03, midZ);
   scene.add(ground);
 }
@@ -465,55 +502,86 @@ function buildSchlossBackdrop(index, side, setback){
 }
 
 /* "The Oracle": Lachs-Fassade, dunkle Ladenfront, Markise, Bordeaux-Stühle + Holztische */
+/* "78 Luitpoldstraße" — lange lachsfarbene Ladenzeile unter einem Dach:
+   links "Tabak & Shisha" (3 große Schaufenster), rechts "Oracle" Eiscafé
+   mit rotem Rundlogo, roten Stühlen und dunklen Tischen davor. Oben EINE
+   Fensterreihe mit weißen Giebel-Bögen (manche mit grauem Rollladen).
+   Maße aus Street View mit Türbreite (~0.9 m) als Referenz abgeschätzt:
+   Fassade ~17-18 m breit -> 10.5 Welteinheiten. */
 function buildOracleBuilding(index, side, setback){
   const p = atIndex(index, side, setback);
   const faceAngle = facingRoadAngle(p.perpx, p.perpz, side);
+  const W = 10.6, H = 3.6, D = 4.6;
   const g = new THREE.Group();
-  addPart(g, rbox(7.4,4.4,4.0,0.12,2), "#E8896B").position.y = 2.2;
-  addPart(g, rbox(7.7,0.4,4.3,0.08,2), "#f2ead8").position.y = 4.5;
-  const signband = addPart(g, rbox(5.2,0.7,0.15,0.08,1), "#2a2430");
-  signband.position.set(0, 3.15, 2.05);
-  const awning = addPart(g, rbox(6.6,0.3,1.4,0.08,1), "#241e2c");
-  awning.position.set(0, 2.55, 2.6); awning.rotation.x = -0.32;
-  [-2.4,0,2.4].forEach(dx=>{
-    addPart(g, rbox(1.3,1.6,0.1,0.06,1), "#2c2430").position.set(dx, 1.15, 2.02);
+
+  addPart(g, rbox(W,H,D,0.06,2), "#E8896B").position.y = H/2;
+  addPart(g, rbox(W+0.3,0.3,D+0.3,0.05,2), "#f2ead8").position.y = H+0.15; // flaches Traufband, kein Spitzdach
+
+  /* Fensterreihe oben: 7 Fenster mit weißem Giebelbogen, manche mit Rollladen */
+  const winCount = 7;
+  for(let i=0;i<winCount;i++){
+    const dx = -W/2 + W/(winCount+1)*(i+1);
+    const shuttered = i % 3 === 1;
+    addPart(g, rbox(0.72,0.9,0.08,0.03,1), shuttered ? "#8a8478" : "#3a5a72").position.set(dx, H*0.72, D/2-0.02);
+    addPart(g, rbox(0.86,0.12,0.1,0.03,1), "#f2ead8").position.set(dx, H*0.72-0.51, D/2-0.02);
+    const pediment = addPart(g, new THREE.ConeGeometry(0.5,0.3,3), "#f2ead8");
+    pediment.position.set(dx, H*0.72+0.56, D/2-0.02);
+    pediment.rotation.z = Math.PI;
+    pediment.rotation.y = Math.PI/2;
+  }
+
+  /* Ladenzeile unten: links "Tabak & Shisha" (3 breite Fenster), rechts "Oracle" schmaler */
+  addPart(g, rbox(W*0.62,1.7,0.12,0.04,1), "#241e2c").position.set(-W*0.16, 1.05, D/2-0.02);
+  [-W*0.35,-W*0.16,W*0.03].forEach(dx=>{
+    addPart(g, rbox(W*0.16,1.35,0.05,0.03,1), "#2a2a3a").position.set(dx, 1.1, D/2+0.02);
   });
+  addPart(g, rbox(W*0.28,1.7,0.12,0.04,1), "#2c2430").position.set(W*0.34, 1.05, D/2-0.02);
+  addPart(g, rbox(W*0.22,1.35,0.05,0.03,1), "#2a2a3a").position.set(W*0.34, 1.1, D/2+0.02);
+  const logo = addPart(g, new THREE.CylinderGeometry(0.42,0.42,0.08,16), "#8B2E3C");
+  logo.rotation.x = Math.PI/2;
+  logo.position.set(-W*0.44, 2.0, D/2+0.05);
+
+  const signCanvas = document.createElement("canvas");
+  signCanvas.width = 512; signCanvas.height = 96;
+  const sctx = signCanvas.getContext("2d");
+  sctx.fillStyle = "#8B2E3C"; sctx.fillRect(0,0,512,96);
+  sctx.fillStyle = "#f2ead8"; sctx.font = "bold 44px 'Space Grotesk', sans-serif"; sctx.textAlign = "center"; sctx.textBaseline = "middle";
+  sctx.fillText("ORACLE", 256, 50);
+  const signTex = new THREE.CanvasTexture(signCanvas);
+  const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(W*0.24,0.55), new THREE.MeshBasicMaterial({ map: signTex, transparent:true }));
+  signMesh.position.set(W*0.34, 1.95, D/2+0.06);
+  g.add(signMesh);
+
   g.position.set(p.x,0,p.z);
   g.rotation.y = faceAngle;
   scene.add(g);
-  fakeShadow(p.x,p.z,4.6);
+  fakeShadow(p.x,p.z,6.2);
 
-  /* lokale +Z-Achse (Schaufenster) zeigt nach der Rotation in Weltrichtung (sinθ, cosθ) */
+  /* rote Stühle + dunkle Tischchen vor dem Oracle-Teil (rechte Fassadenhälfte) */
   const dirx = Math.sin(faceAngle), dirz = Math.cos(faceAngle);
   const sidex = Math.cos(faceAngle), sidez = -Math.sin(faceAngle);
-  const tableTop = new THREE.CylinderGeometry(0.4,0.4,0.07,14);
-  const tableLeg = new THREE.CylinderGeometry(0.05,0.05,0.7,8);
-  const chairSeat = new THREE.BoxGeometry(0.4,0.08,0.4);
-  const chairBack = new THREE.BoxGeometry(0.4,0.5,0.06);
-  [-1.6,1.6].forEach(lx=>{
-    const tx = p.x + dirx*3.2 + sidex*lx, tz = p.z + dirz*3.2 + sidez*lx;
-    const table = new THREE.Mesh(tableTop, toonMaterial("#8a6a4a"));
-    table.position.set(tx,0.72,tz);
-    scene.add(table); addOutline(table, scene, 0.05);
-    const leg = new THREE.Mesh(tableLeg, toonMaterial("#3a3244"));
-    leg.position.set(tx,0.36,tz);
+  const tableTop = new THREE.CylinderGeometry(0.35,0.35,0.05,14);
+  const tableLeg = new THREE.CylinderGeometry(0.04,0.04,0.68,8);
+  const chairSeat = new THREE.BoxGeometry(0.36,0.06,0.36);
+  const chairBack = new THREE.BoxGeometry(0.36,0.42,0.05);
+  [W*0.20, W*0.40].forEach(lx=>{
+    const tx = p.x + dirx*2.6 + sidex*lx, tz = p.z + dirz*2.6 + sidez*lx;
+    const table = new THREE.Mesh(tableTop, toonMaterial("#2c2430"));
+    table.position.set(tx,0.68,tz);
+    scene.add(table); addOutline(table, scene, 0.04);
+    const leg = new THREE.Mesh(tableLeg, toonMaterial("#2c2430"));
+    leg.position.set(tx,0.34,tz);
     scene.add(leg);
-    const umbrellaPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,1.7,8), toonMaterial("#3a3244"));
-    umbrellaPole.position.set(tx,1.5,tz);
-    scene.add(umbrellaPole);
-    const umbrella = new THREE.Mesh(new THREE.ConeGeometry(1.15,0.55,10), toonMaterial("#8B2E3C"));
-    umbrella.position.set(tx,2.35,tz);
-    scene.add(umbrella); addOutline(umbrella, scene, 0.05);
-    [[-0.55,0],[0.55,0],[0,0.55],[0,-0.55]].forEach(([cx,cz])=>{
-      const seat = new THREE.Mesh(chairSeat, toonMaterial("#8B2E3C"));
-      seat.position.set(tx+cx,0.42,tz+cz);
-      scene.add(seat); addOutline(seat, scene, 0.05);
-      const back = new THREE.Mesh(chairBack, toonMaterial("#8B2E3C"));
-      back.position.set(tx+cx*1.15,0.65,tz+cz*1.15);
-      back.lookAt(tx,0.65,tz);
-      scene.add(back); addOutline(back, scene, 0.05);
+    [[-0.5,-0.15],[0.5,-0.15]].forEach(([cx,cz])=>{
+      const seat = new THREE.Mesh(chairSeat, toonMaterial("#B23A3A"));
+      seat.position.set(tx+cx,0.4,tz+cz);
+      scene.add(seat); addOutline(seat, scene, 0.04);
+      const back = new THREE.Mesh(chairBack, toonMaterial("#B23A3A"));
+      back.position.set(tx+cx*1.2,0.62,tz+cz*1.2-0.15);
+      back.lookAt(tx,0.62,tz);
+      scene.add(back); addOutline(back, scene, 0.04);
     });
-    fakeShadow(tx,tz,1.1);
+    fakeShadow(tx,tz,0.9);
   });
 
   return p;
@@ -592,8 +660,9 @@ function buildLuitpoldstrasse(){
   /* --- IL Pinguino Eiscafé --- */
   heroBuilding(13, SHOP_SIDE, ROAD_W/2+WALK_W+3.6, { w:5.0, h:5.2, d:3.4, color:"#e9e5da", trim:"#c9c2b0", awning:true, dormer:false });
   markHero(13);
-  /* --- Schloss: großer Fernblick-Baukörper auf der gegenüberliegenden Seite --- */
-  buildSchlossBackdrop(11, WALL_SIDE, ROAD_W/2+WALK_W+20);
+  /* --- Schloss: großer Fernblick-Baukörper auf der gegenüberliegenden Seite,
+     deutlich zurückgesetzt (steht in echt auf einem Felsen, nicht am Bordstein) --- */
+  buildSchlossBackdrop(11, WALL_SIDE, ROAD_W/2+WALK_W+38);
   /* --- Oskar's Bar, Übergang zur Flusspromenade --- */
   heroBuilding(16, SHOP_SIDE, ROAD_W/2+WALK_W+3.4, { w:6.5, h:6.5, d:4.0, color:"#e9dfc0", trim:"#c9bfa0", dormer:true, shopband:true });
   markHero(16);
@@ -602,7 +671,7 @@ function buildLuitpoldstrasse(){
   const shopPalette = ["#D9A441","#C9A98B","#E8C77E","#B5562F","#dcd0b8"];
   let colorIdx = 0;
   for(let d = 8; d <= PATH_LEN-8; d += 6.0){
-    if(heroDistances.some(hd => Math.abs(hd-d) < 5)) continue;
+    if(heroDistances.some(hd => Math.abs(hd-d) < 7)) continue;
     fillerRowHouse(d, SHOP_SIDE, shopPalette[colorIdx % shopPalette.length], colorIdx % 2 === 0);
     colorIdx++;
   }
@@ -622,27 +691,8 @@ function buildLuitpoldstrasse(){
     fakeShadow(p.x,p.z,1.0);
   });
 
-  /* --- Laternen + parkende Autos entlang der ganzen Strecke --- */
+  /* --- Laternen entlang der ganzen Strecke (keine Autos — auf Wunsch weggelassen) --- */
   for(let d = 10; d <= PATH_LEN-10; d += 16) streetLamp(d, SHOP_SIDE);
-  const carColors = ["#3d4a5c","#8a1f2b","#c7c2c9","#2a2f38"];
-  let carIdx = 0;
-  for(let d = 14; d <= PATH_LEN-14; d += 11){
-    if(d > wallFrom-6 && d < wallTo+6) continue; // nicht direkt vor der Mauer parken
-    parkedCar(d, WALL_SIDE, carColors[carIdx % carColors.length]);
-    carIdx++;
-  }
-
-  /* --- vereinzelte Bäume auf der offenen Seite --- */
-  for(let d = 20; d <= PATH_LEN-20; d += 22){
-    const p = atDist(d, WALL_SIDE, ROAD_W/2+WALK_W+2.4);
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.26,1.7,7), toonMaterial("#8a5a3a"));
-    trunk.position.set(p.x,0.85,p.z);
-    scene.add(trunk);
-    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.2,10,8), toonMaterial("#4f9a4a"));
-    leaves.position.set(p.x,2.2,p.z);
-    scene.add(leaves); addOutline(leaves, scene, 0.06);
-    fakeShadow(p.x,p.z,1.1);
-  }
 
   return oraclePos;
 }
